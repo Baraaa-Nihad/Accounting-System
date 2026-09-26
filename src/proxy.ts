@@ -7,7 +7,7 @@ import { NextResponse, type NextRequest } from 'next/server'
  */
 
 const SESSION_COOKIE = 'sa_session'
-const PUBLIC_PATHS = ['/login', '/api/health']
+const PUBLIC_PATHS = ['/login', '/api/health', '/api/logo']
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl

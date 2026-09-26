@@ -9,7 +9,7 @@ import type { DateOnly } from '@/lib/dates'
  * حتى نهاية المعاملة، فلا يتكرر رقم، وإذا فشل الحفظ يُلغى الحجز فلا تنشأ فجوة.
  */
 
-export type YearlySequence = 'receipt' | 'voucher' | 'transfer' | 'bill' | 'journal'
+export type YearlySequence = 'receipt' | 'voucher' | 'transfer' | 'bill' | 'journal' | 'opening'
 export type PlainSequence = 'student' | 'employee'
 
 async function bump(tx: Tx, key: string): Promise<number> {
@@ -25,7 +25,8 @@ async function bump(tx: Tx, key: string): Promise<number> {
 /** رقم مستند سنوي: REC-2026-000001 (السنة = السنة الميلادية لتاريخ المستند). */
 export async function nextDocumentNumber(tx: Tx, type: YearlySequence, date: DateOnly): Promise<string> {
   const { numbering } = await getSettings(tx)
-  const fmt = numbering[type]
+  // «رصيد دائن افتتاحي» ليس سند قبض نقدي، فله تسلسل مستقل
+  const fmt = type === 'opening' ? { prefix: 'OB', padding: 6 } : numbering[type]
   const year = date.slice(0, 4)
   const value = await bump(tx, `${type.toUpperCase()}:${year}`)
   const serial = String(value).padStart(fmt.padding, '0')
