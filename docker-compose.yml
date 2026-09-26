@@ -1,0 +1,53 @@
+# تشغيل النظام كاملًا: قاعدة البيانات + الترحيل + التطبيق
+#   cp .env.example .env   ثم عدّل كلمات المرور والمفتاح
+#   docker compose up -d --build
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: school
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?اضبط POSTGRES_PASSWORD في ملف .env}
+      POSTGRES_DB: school_accounting
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U school -d school_accounting"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_URL: postgresql://school:${POSTGRES_PASSWORD}@db:5432/school_accounting
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?اضبط ADMIN_PASSWORD في ملف .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://school:${POSTGRES_PASSWORD}@db:5432/school_accounting
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?اضبط BACKUP_ENCRYPTION_KEY في ملف .env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      BACKUP_CRON_TOKEN: ${BACKUP_CRON_TOKEN:-}
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  storage:
