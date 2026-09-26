@@ -18,6 +18,7 @@ describe('ledger posting', () => {
     const date = await currentDate()
     const cash = await db.cashAccount.findFirstOrThrow({ where: { isDefault: true } })
     const opening = await accountIdByKey(db, 'OPENING_BALANCE')
+    const before = (await accountTotals(db, cash.glAccountId)).net
     const entry = await transaction((tx) =>
       postEntry(tx, testCtx(), {
         date,
@@ -31,11 +32,11 @@ describe('ledger posting', () => {
     )
     expect(entry.number).toMatch(/^JE-\d{4}-\d{6}$/)
     let totals = await accountTotals(db, cash.glAccountId)
-    expect(totals.net.toFixed(2)).toBe('1000.00')
+    expect(totals.net.minus(before).toFixed(2)).toBe('1000.00')
 
     await transaction((tx) => reverseEntry(tx, testCtx(), entry.id, { date }))
     totals = await accountTotals(db, cash.glAccountId)
-    expect(totals.net.toFixed(2)).toBe('0.00')
+    expect(totals.net.minus(before).toFixed(2)).toBe('0.00')
     const original = await db.journalEntry.findUniqueOrThrow({ where: { id: entry.id } })
     expect(original.status).toBe('REVERSED')
     await expect(transaction((tx) => reverseEntry(tx, testCtx(), entry.id, { date }))).rejects.toThrow()
