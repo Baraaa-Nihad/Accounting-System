@@ -12,7 +12,7 @@ import { postEntry, reverseEntry } from '../ledger/posting'
 import { accountIdByKey, isFreePostingAccount } from '../ledger/accounts'
 import { assertSufficientBalance } from './treasury'
 import { recomputeJobPaid, supplierBalance } from './parties'
-import { recomputePayrollItemPaid } from './payroll'
+import { recomputePayrollItemPaid, releaseAdvanceFromDrafts } from './payroll'
 import { D, round, sum, toDb } from '@/lib/money'
 import { fromDateOnly, type DateOnly } from '@/lib/dates'
 import { PAYMENT_METHOD, VOUCHER_KIND } from '@/lib/labels'
@@ -130,8 +130,10 @@ async function resolvePosting(tx: Tx, ctx: Ctx, input: VoucherInput, amount: Dec
       }
     }
     case 'ADVANCE': {
-      const adv = await tx.employeeAdvance.findUnique({ where: { id: input.advanceId ?? -1 }, include: { employee: true } })
+      const adv = await tx.employeeAdvance.findUnique({ where: { id: input.advanceId ?? -1 }, include: { employee: true, voucher: true } })
       if (!adv) throw new BusinessError('السلفة غير موجودة')
+      if (adv.voucher) throw new BusinessError('صُرفت هذه السلفة مسبقًا')
+      if (!D(adv.amount).equals(amount)) throw new BusinessError('مبلغ السند يجب أن يساوي مبلغ السلفة')
       return {
         debitAccountId: await accountIdByKey(tx, 'EMPLOYEE_ADVANCES'),
         party: { employeeId: adv.employeeId },
@@ -278,11 +280,14 @@ export async function createVoucher(tx: Tx, ctx: Ctx, input: VoucherInput) {
 
 export async function cancelVoucher(tx: Tx, ctx: Ctx, voucherId: number, reason: string) {
   const { finance } = await getSettings(tx)
-  const v = await tx.paymentVoucher.findUnique({ where: { id: voucherId }, include: { cheque: true, advance: { include: { deductions: true } } } })
+  const v = await tx.paymentVoucher.findUnique({
+    where: { id: voucherId },
+    include: { cheque: true, advance: { include: { deductions: { where: { payrollItem: { payrollRun: { status: 'APPROVED' } } } } } } },
+  })
   if (!v) throw new BusinessError('السند غير موجود')
   if (v.status === 'CANCELLED') throw new BusinessError('السند ملغي مسبقًا')
   if (v.kind === 'ADVANCE' && v.advance && v.advance.deductions.length > 0) {
-    throw new BusinessError('تم خصم أقساط من هذه السلفة في الرواتب، لا يمكن إلغاء سند صرفها')
+    throw new BusinessError('خُصمت أقساط من هذه السلفة في رواتب معتمدة، لا يمكن إلغاء سند صرفها')
   }
   const date = await todayOf(tx)
   await tx.paymentVoucher.update({
@@ -300,6 +305,7 @@ export async function cancelVoucher(tx: Tx, ctx: Ctx, voucherId: number, reason:
   }
   if (v.kind === 'ADVANCE' && v.advanceId) {
     await tx.employeeAdvance.update({ where: { id: v.advanceId }, data: { status: 'CANCELLED' } })
+    await releaseAdvanceFromDrafts(tx, v.advanceId)
   }
   if (v.cheque) await tx.cheque.update({ where: { id: v.cheque.id }, data: { status: 'CANCELLED' } })
   await audit(tx, ctx, {
