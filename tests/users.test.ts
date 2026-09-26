@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { db, transaction } from '@/server/db'
 import { verifyPassword } from '@/server/auth/password'
 import { createUser, deleteRole, endUserSessions, resetUserPassword, saveRole, unlockUser, updateUser } from '@/server/services/users'
-import { listPartners, savePartner } from '@/server/services/partners'
+import { deletePartner, listPartners, savePartner } from '@/server/services/partners'
 import { createOtherReceipt } from '@/server/services/receipts'
 import { createVoucher } from '@/server/services/vouchers'
 import { statementTarget, targetStatement } from '@/server/ledger/party-statements'
@@ -159,5 +159,14 @@ describe('partners', () => {
     await transaction((tx) => savePartner(tx, ctx, { id: p.id, name: `${name} ب`, phone: null, email: null, ownershipPercent: 0, userId: null, joinDate: null, notes: null, isActive: true }))
     expect((await db.account.findUniqueOrThrow({ where: { id: p.drawingsAccountId! } })).name).toBe(`جاري — ${name} ب`)
     expect(await trialBalanceDiff()).toBe(0)
+    await expect(transaction((tx) => deletePartner(tx, ctx, p.id))).rejects.toThrow(/حركات مالية/)
+  })
+
+  it('deletes a partner added by mistake (no movements) together with its accounts', async () => {
+    const p = await transaction((tx) => savePartner(tx, ctx, { name: `شريك خطأ ${uid()}`, phone: null, email: null, ownershipPercent: 0, userId: null, joinDate: null, notes: null, isActive: true }))
+    await transaction((tx) => deletePartner(tx, ctx, p.id))
+    expect(await db.partner.findUnique({ where: { id: p.id } })).toBeNull()
+    expect(await db.account.count({ where: { id: { in: [p.capitalAccountId!, p.drawingsAccountId!] } } })).toBe(0)
+    expect(await db.auditLog.count({ where: { entityType: 'Partner', entityId: String(p.id), action: 'delete' } })).toBe(1)
   })
 })

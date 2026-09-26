@@ -1,5 +1,8 @@
 import { chromium } from 'playwright-core'
 
+// دورة الرواتب كاملة من الواجهة. يتطلب شهرًا بلا مسير معتمد (قاعدة جديدة أو شهر جديد):
+// النظام يرفض عن قصد تسجيل إضافي أو احتساب مسير ثانٍ لشهر رواتبه معتمدة.
+
 const base = process.env.BASE_URL || 'http://localhost:3100'
 const out = process.env.OUT_DIR || '.'
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium' })

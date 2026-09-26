@@ -2,13 +2,14 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Plus } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/input'
 import { Field } from '@/components/ui/field'
 import { useAction } from '@/lib/use-action'
-import { savePartnerAction } from '@/app/(app)/partners/actions'
+import { deletePartnerAction, savePartnerAction } from '@/app/(app)/partners/actions'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 export interface PartnerFormValue {
   id: number
@@ -98,5 +99,30 @@ export function PartnerDialog({ initial, users, remainingPercent }: { initial?: 
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** حذف شريك بلا حركات مالية (يظهر فقط عندما يكون الحذف ممكنًا). */
+export function DeletePartnerButton({ partnerId, name }: { partnerId: number; name: string }) {
+  const router = useRouter()
+  const [open, setOpen] = React.useState(false)
+  const { run, pending } = useAction(deletePartnerAction, { refresh: false, onSuccess: () => router.push('/partners') })
+  return (
+    <>
+      <Button variant="danger-outline" onClick={() => setOpen(true)}>
+        <Trash2 />
+        حذف
+      </Button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`حذف الشريك ${name}؟`}
+        description="لا توجد للشريك أي حركة مالية، فيُحذف مع حسابيه في دليل الحسابات. العملية مسجلة في سجل النشاط."
+        confirmLabel="حذف"
+        danger
+        pending={pending}
+        onConfirm={() => run(partnerId)}
+      />
+    </>
   )
 }

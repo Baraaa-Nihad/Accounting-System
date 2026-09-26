@@ -109,3 +109,27 @@ export async function listPartners(client: DbOrTx) {
     return { ...p, capital, current, withdrawals: cur ? cur.debit : D(0), equity: capital.plus(current) }
   })
 }
+
+/** هل للشريك حركات مالية (سندات أو أطراف قيود)؟ */
+export async function partnerHasMovements(client: DbOrTx, partner: { id: number; capitalAccountId: number | null; drawingsAccountId: number | null }) {
+  const accounts = [partner.capitalAccountId, partner.drawingsAccountId].filter((x): x is number => x !== null)
+  const [receipts, vouchers, lines] = await Promise.all([
+    client.receipt.count({ where: { partnerId: partner.id } }),
+    client.paymentVoucher.count({ where: { partnerId: partner.id } }),
+    client.journalLine.count({ where: { OR: [{ partnerId: partner.id }, ...(accounts.length ? [{ accountId: { in: accounts } }] : [])] } }),
+  ])
+  return receipts + vouchers + lines > 0
+}
+
+/** حذف شريك أُضيف بالخطأ (بلا أي حركة مالية) مع حسابيه. من له حركات يُعطّل ولا يُحذف. */
+export async function deletePartner(tx: Tx, ctx: Ctx, id: number) {
+  const p = await tx.partner.findUnique({ where: { id } })
+  if (!p) throw new BusinessError('الشريك غير موجود')
+  if (await partnerHasMovements(tx, p)) {
+    throw new BusinessError('للشريك حركات مالية مسجلة، فلا يُحذف حفاظًا على السجل المالي. يمكنك إيقافه بدلًا من ذلك.')
+  }
+  await tx.partner.delete({ where: { id } })
+  const accounts = [p.capitalAccountId, p.drawingsAccountId].filter((x): x is number => x !== null)
+  if (accounts.length) await tx.account.deleteMany({ where: { id: { in: accounts } } })
+  await audit(tx, ctx, { action: 'delete', entityType: 'Partner', entityId: id, entityLabel: p.name, summary: `حذف الشريك ${p.name} (لا توجد له حركات مالية) مع حسابيه`, before: p })
+}

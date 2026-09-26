@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import { requirePermission, can } from '@/server/auth/guard'
 import { db } from '@/server/db'
-import { listPartners } from '@/server/services/partners'
+import { listPartners, partnerHasMovements } from '@/server/services/partners'
 import { statementTarget } from '@/server/ledger/party-statements'
 import { getFormatConfig } from '@/server/settings'
 import { makeFormatters } from '@/lib/format-jsx'
@@ -14,7 +14,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { StatementView } from '@/components/ledger/statement-view'
-import { PartnerDialog } from '@/components/users/partner-dialog'
+import { DeletePartnerButton, PartnerDialog } from '@/components/users/partner-dialog'
 
 export const metadata = { title: 'شريك' }
 
@@ -33,6 +33,7 @@ export default async function PartnerPage({ params, searchParams }: PageProps<'/
   const p = partners.find((x) => x.id === id)
   if (!p || !target) notFound()
   const f = makeFormatters(fmt)
+  const deletable = manage && !(await partnerHasMovements(db, p))
   const othersAllocated = sum(partners.filter((x) => x.isActive && x.id !== p.id).map((x) => D(x.ownershipPercent)))
   return (
     <>
@@ -91,6 +92,7 @@ export default async function PartnerPage({ params, searchParams }: PageProps<'/
                 }}
               />
             ) : null}
+            {deletable ? <DeletePartnerButton partnerId={p.id} name={p.name} /> : null}
           </>
         }
       />
