@@ -291,4 +291,20 @@ describe('payroll cycle', () => {
     expect((await db.employeeAdvance.findFirstOrThrow({ where: { employeeId: emp.id } })).status).toBe('CANCELLED')
     expect(await trialBalanceDiff()).toBe(0)
   })
+
+  it('does not allow paying a salary before the payroll posting date', async () => {
+    const mo = await month(6)
+    await freeMonth(mo.year, mo.month)
+    const box = await cashbox()
+    const emp = await employee('1500')
+    const end = makeDate(mo.year, mo.month, 28)
+    const run = await transaction((tx) => createPayrollRun(tx, testCtx(), { year: mo.year, month: mo.month, postingDate: end }))
+    await transaction((tx) => approveRun(tx, testCtx(), run.id))
+    const item = await itemOf(run.id, emp.id)
+    await expect(
+      transaction((tx) => createVoucher(tx, testCtx(), { kind: 'SALARY', date: mo.mid, amount: '100', paymentMethod: 'CASH', cashAccountId: box.id, payrollItemId: item.id })),
+    ).rejects.toThrow(/قبل تاريخ قيد/)
+    await transaction((tx) => paySalaries(tx, testCtx(), { runId: run.id, itemIds: [item.id], date: end, cashAccountId: box.id, paymentMethod: 'CASH' }))
+    expect((await itemOf(run.id, emp.id)).paymentStatus).toBe('PAID')
+  })
 })

@@ -84,3 +84,10 @@ export const paymentMethod = z.enum(['CASH', 'CHEQUE', 'BANK_TRANSFER', 'CARD', 
 })
 
 export const cancelReason = z.string({ error: 'سبب الإلغاء مطلوب' }).trim().min(3, 'اكتب سبب الإلغاء (3 أحرف على الأقل)').max(500)
+
+/** عدد صحيح اختياري: الفراغ يتحول إلى null */
+export const optionalInt = (minValue: number, maxValue: number) =>
+  z
+    .union([z.literal(''), z.null(), z.coerce.number().int().min(minValue).max(maxValue)])
+    .optional()
+    .transform((v) => (typeof v === 'number' ? v : null))

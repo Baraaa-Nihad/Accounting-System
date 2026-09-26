@@ -89,3 +89,8 @@ export async function actionContext(...permissions: Permission[]): Promise<Ctx &
 export function assertCan(ctx: Ctx, permission: Permission, message?: string) {
   if (!ctx.permissions.has(permission)) throw new PermissionError(message)
 }
+
+/** الاطلاع على مبالغ الرواتب: صلاحية «الاطلاع على الرواتب» أو إدارة/صرف الرواتب. */
+export function canSeeSalaries(user: CurrentUser | null | undefined): boolean {
+  return canAny(user, ['salaries.view', 'payroll.manage', 'payroll.pay'])
+}

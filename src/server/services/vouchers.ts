@@ -14,7 +14,7 @@ import { assertSufficientBalance } from './treasury'
 import { recomputeJobPaid, supplierBalance } from './parties'
 import { recomputePayrollItemPaid, releaseAdvanceFromDrafts } from './payroll'
 import { D, round, sum, toDb } from '@/lib/money'
-import { fromDateOnly, type DateOnly } from '@/lib/dates'
+import { fromDateOnly, toDateOnly, type DateOnly } from '@/lib/dates'
 import { PAYMENT_METHOD, VOUCHER_KIND } from '@/lib/labels'
 import type Decimal from 'decimal.js'
 
@@ -118,6 +118,9 @@ async function resolvePosting(tx: Tx, ctx: Ctx, input: VoucherInput, amount: Dec
       const item = await tx.payrollItem.findUnique({ where: { id: input.payrollItemId ?? -1 }, include: { employee: true, payrollRun: true } })
       if (!item) throw new BusinessError('بند الراتب غير موجود')
       if (item.payrollRun.status !== 'APPROVED') throw new BusinessError('لا يمكن صرف راتب من مسير غير معتمد')
+      if (input.date < toDateOnly(item.payrollRun.postingDate)) {
+        throw new BusinessError(`تاريخ الصرف قبل تاريخ قيد مسير الرواتب (${toDateOnly(item.payrollRun.postingDate)})`, { date: 'قبل تاريخ قيد المسير' })
+      }
       await tx.$queryRaw`SELECT "id" FROM "payroll_items" WHERE "id" = ${item.id} FOR UPDATE`
       const remaining = D(item.netPay).minus(D(item.paidAmount))
       if (amount.greaterThan(remaining)) throw new BusinessError(`المبلغ أكبر من المتبقي من راتب ${item.employee.fullName} (${remaining.toFixed(decimals)})`)

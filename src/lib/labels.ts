@@ -188,6 +188,7 @@ export const AUDIT_ACTION: Record<string, string> = {
   bounce: 'شيك مرتجع',
   status: 'تغيير حالة',
   settings: 'تعديل الإعدادات',
+  recalculate: 'إعادة احتساب',
 }
 
 export const ENTITY_LABEL: Record<string, string> = {
@@ -205,6 +206,8 @@ export const ENTITY_LABEL: Record<string, string> = {
   Cheque: 'شيك',
   Employee: 'موظف',
   PayrollRun: 'مسير رواتب',
+  PayrollItem: 'بند راتب',
+  Statement: 'كشف حساب',
   OvertimeEntry: 'ساعات إضافية',
   EmployeeAdvance: 'سلفة',
   Supplier: 'مورد',

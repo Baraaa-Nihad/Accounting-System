@@ -196,7 +196,11 @@ export async function createPayrollRun(tx: Tx, ctx: Ctx, input: { year: number; 
   if (!Number.isInteger(year) || year < 2000 || year > 2200) throw new BusinessError('السنة غير صالحة', { year: 'غير صالحة' })
   const exists = await tx.payrollRun.findFirst({ where: { year, month, status: { not: 'CANCELLED' } } })
   if (exists) throw new BusinessError(`يوجد مسير رواتب لشهر ${month}/${year} مسبقًا`, { month: 'موجود مسبقًا' })
-  const postingDate = input.postingDate ?? monthEnd(year, month)
+  // تاريخ القيد الافتراضي: آخر الشهر، أو اليوم إن كان الشهر لم ينته بعد (حتى لا يُصرف راتب قبل قيده)
+  const today = await todayOf(tx)
+  const end = monthEnd(year, month)
+  const first = makeDate(year, month, 1)
+  const postingDate = input.postingDate ?? (end <= today ? end : today < first ? first : today)
   const academicYear = await resolveOpenYear(tx, postingDate)
   const last = fromDateOnly(monthEnd(year, month))
   const employees = await tx.employee.findMany({
@@ -624,4 +628,19 @@ export async function listOvertime(client: DbOrTx, f: { employeeId?: number; sta
     totalHours: D(sums._sum.hours).toString(),
     totalAmount: D(sums._sum.amount).toString(),
   }
+}
+
+/** مجموع أقساط السلف المخططة (قبل التخفيض) لكل موظف في شهر المسير — لمعاينة الجدول. */
+export async function plannedAdvancesForRun(client: DbOrTx, run: { year: number; month: number }, employeeIds: number[]) {
+  const result = new Map<number, string>()
+  if (!employeeIds.length) return result
+  const advances = await client.employeeAdvance.findMany({ where: { employeeId: { in: employeeIds }, status: 'ACTIVE' } })
+  const key = run.year * 12 + run.month
+  for (const a of advances) {
+    if (a.startYear * 12 + a.startMonth > key) continue
+    const remaining = D(a.amount).minus(D(a.deductedAmount))
+    if (!remaining.greaterThan(0)) continue
+    result.set(a.employeeId, D(result.get(a.employeeId) ?? 0).plus(min(a.monthlyDeduction, remaining)).toString())
+  }
+  return result
 }
