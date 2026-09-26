@@ -66,9 +66,17 @@ function searchTextOf(e: { fullName: string; employeeNumber: string; phone: stri
   return buildSearchText([e.fullName, e.employeeNumber, e.phone, e.jobTitle, e.department, e.nationalId])
 }
 
-export async function createEmployee(tx: Tx, ctx: Ctx, input: EmployeeInput) {
+export async function createEmployee(tx: Tx, ctx: Ctx, input: EmployeeInput, extra?: { employeeNumber?: string | null }) {
   const data = employeeData(input)
-  const employeeNumber = await nextPlainNumber(tx, 'employee', async (n) => !!(await tx.employee.findUnique({ where: { employeeNumber: n } })))
+  let employeeNumber: string
+  if (extra?.employeeNumber) {
+    if (await tx.employee.findUnique({ where: { employeeNumber: extra.employeeNumber } })) {
+      throw new BusinessError(`الرقم الوظيفي ${extra.employeeNumber} مستخدم لموظف آخر`, { employeeNumber: 'مستخدم' })
+    }
+    employeeNumber = extra.employeeNumber
+  } else {
+    employeeNumber = await nextPlainNumber(tx, 'employee', async (n) => !!(await tx.employee.findUnique({ where: { employeeNumber: n } })))
+  }
   const created = await tx.employee.create({
     data: { ...data, employeeNumber, importBatchId: input.importBatchId ?? null, searchText: searchTextOf({ ...data, employeeNumber }) },
   })

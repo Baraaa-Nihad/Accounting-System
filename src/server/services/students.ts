@@ -66,7 +66,7 @@ async function findDuplicate(tx: DbOrTx, data: { fullName: string; schoolNumber:
   return null
 }
 
-export async function createStudent(tx: Tx, ctx: Ctx, input: StudentData) {
+export async function createStudent(tx: Tx, ctx: Ctx, input: StudentData, extra?: { studentNumber?: string | null; importBatchId?: number | null }) {
   const grade = await assertGradeSection(tx, input.gradeId, input.sectionId)
   const year = await tx.academicYear.findUnique({ where: { id: input.academicYearId } })
   if (!year) throw new BusinessError('السنة الدراسية غير موجودة', { academicYearId: 'اختر السنة الدراسية' })
@@ -89,7 +89,16 @@ export async function createStudent(tx: Tx, ctx: Ctx, input: StudentData) {
     })
   }
 
-  const studentNumber = await nextPlainNumber(tx, 'student', async (n) => !!(await tx.student.findUnique({ where: { studentNumber: n } })))
+  let studentNumber: string
+  if (extra?.studentNumber) {
+    // رقم طالب من النظام القديم (الاستيراد) — يجب ألا يكون مستخدمًا
+    if (await tx.student.findUnique({ where: { studentNumber: extra.studentNumber } })) {
+      throw new BusinessError(`رقم الطالب ${extra.studentNumber} مستخدم لطالب آخر`, { studentNumber: 'مستخدم' })
+    }
+    studentNumber = extra.studentNumber
+  } else {
+    studentNumber = await nextPlainNumber(tx, 'student', async (n) => !!(await tx.student.findUnique({ where: { studentNumber: n } })))
+  }
   const student = await tx.student.create({
     data: {
       studentNumber,
@@ -102,6 +111,7 @@ export async function createStudent(tx: Tx, ctx: Ctx, input: StudentData) {
       address: input.address,
       notes: input.notes,
       guardianId,
+      importBatchId: extra?.importBatchId ?? null,
       createdById: ctx.userId,
       enrollments: {
         create: { academicYearId: input.academicYearId, gradeId: input.gradeId, sectionId: input.sectionId },

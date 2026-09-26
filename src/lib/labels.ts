@@ -123,6 +123,19 @@ export const OVERTIME_STATUS: Record<string, { label: string; tone: Tone }> = {
   CANCELLED: { label: 'ملغي', tone: 'gray' },
 }
 
+export const IMPORT_STATUS: Record<string, { label: string; tone: Tone }> = {
+  PENDING: { label: 'بانتظار التأكيد', tone: 'amber' },
+  COMPLETED: { label: 'تم الاستيراد', tone: 'green' },
+  FAILED: { label: 'فشل', tone: 'red' },
+}
+
+export const IMPORT_ROW_STATUS: Record<string, { label: string; tone: Tone }> = {
+  valid: { label: 'صالح', tone: 'green' },
+  duplicate: { label: 'مكرر', tone: 'amber' },
+  error: { label: 'خطأ', tone: 'red' },
+  imported: { label: 'تم استيراده', tone: 'teal' },
+}
+
 export const ACCOUNT_TYPE: Record<string, string> = {
   ASSET: 'أصول',
   LIABILITY: 'التزامات',
