@@ -42,6 +42,37 @@ export function todayInTimeZone(timeZone: string, now: Date = new Date()): DateO
   }
 }
 
+/** فرق المنطقة الزمنية عن UTC (بالمللي ثانية) في لحظة معينة. */
+function timeZoneOffsetMs(timeZone: string, at: Date): number {
+  const p = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(at)
+  const get = (t: string) => Number(p.find((x) => x.type === t)?.value ?? 0)
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+  return asUtc - Math.floor(at.getTime() / 1000) * 1000
+}
+
+/** بداية اليوم (منتصف الليل) بتوقيت المدرسة كلحظة زمنية — لفلترة الأوقات (سجل النشاط، محاولات الدخول). */
+export function startOfDayInTimeZone(value: DateOnly, timeZone: string): Date {
+  const { y, m, d } = parts(value)
+  const utcMidnight = Date.UTC(y, m - 1, d)
+  try {
+    const first = utcMidnight - timeZoneOffsetMs(timeZone, new Date(utcMidnight))
+    // تصحيح عند تغيّر التوقيت الصيفي في نفس اليوم
+    const second = utcMidnight - timeZoneOffsetMs(timeZone, new Date(first))
+    return new Date(second)
+  } catch {
+    return new Date(utcMidnight)
+  }
+}
+
 export function parts(value: DateOnly): { y: number; m: number; d: number } {
   const [y, m, d] = value.split('-').map(Number)
   return { y, m, d }

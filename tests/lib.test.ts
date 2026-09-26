@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { D, splitEven, percentOf, distributeProportional, parseAmountInput, sum } from '@/lib/money'
 import { amountToArabicWords, numberToWords } from '@/lib/tafqeet'
-import { addMonths, parseFlexibleDate, startOfWeek, endOfMonth, diffDays } from '@/lib/dates'
+import { addMonths, parseFlexibleDate, startOfWeek, endOfMonth, diffDays, startOfDayInTimeZone } from '@/lib/dates'
 import { normalizeArabic, buildSearchText, cleanPhone, phonesMatch } from '@/lib/arabic'
 import { effectivePermissions } from '@/lib/permissions'
 
@@ -74,6 +74,16 @@ describe('dates', () => {
     expect(startOfWeek('2026-09-30', 6)).toBe('2026-09-26')
     expect(endOfMonth('2026-02-10')).toBe('2026-02-28')
     expect(diffDays('2026-10-01', '2026-09-26')).toBe(5)
+  })
+})
+
+describe('time zones', () => {
+  it('finds local midnight as an instant', () => {
+    // فلسطين: UTC+3 صيفًا و UTC+2 شتاءً
+    expect(startOfDayInTimeZone('2026-09-26', 'Asia/Hebron').toISOString()).toBe('2026-09-25T21:00:00.000Z')
+    expect(startOfDayInTimeZone('2026-01-15', 'Asia/Hebron').toISOString()).toBe('2026-01-14T22:00:00.000Z')
+    expect(startOfDayInTimeZone('2026-09-26', 'UTC').toISOString()).toBe('2026-09-26T00:00:00.000Z')
+    expect(startOfDayInTimeZone('2026-09-26', 'America/New_York').toISOString()).toBe('2026-09-26T04:00:00.000Z')
   })
 })
 
