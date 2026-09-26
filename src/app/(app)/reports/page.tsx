@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ChevronLeft, FileBarChart2 } from 'lucide-react'
 import { requirePermission } from '@/server/auth/guard'
-import { REPORTS, canOpenReport } from '@/server/reports/registry'
+import { ACCOUNTING_REPORTS, REPORTS, canOpenReport } from '@/server/reports/registry'
 import { REPORT_GROUPS, type ReportGroup } from '@/server/reports/types'
 import { PageHeader } from '@/components/ui/page-header'
 
@@ -9,7 +9,7 @@ export const metadata = { title: 'التقارير' }
 
 export default async function ReportsPage() {
   const user = await requirePermission('reports.view')
-  const available = REPORTS.map((r, i) => ({ ...r, index: i + 1 })).filter((r) => canOpenReport(user, r))
+  const available = [...REPORTS.map((r, i) => ({ ...r, index: i + 1 as number | null })), ...ACCOUNTING_REPORTS.map((r) => ({ ...r, index: null }))].filter((r) => canOpenReport(user, r))
   const groups = (Object.keys(REPORT_GROUPS) as ReportGroup[]).map((g) => ({ key: g, label: REPORT_GROUPS[g], items: available.filter((r) => r.group === g) })).filter((g) => g.items.length)
   return (
     <>
@@ -26,7 +26,7 @@ export default async function ReportsPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 font-semibold text-slate-900">
-                      <span className="num text-xs text-slate-400">{r.index}</span>
+                      {r.index ? <span className="num text-xs text-slate-400">{r.index}</span> : null}
                       {r.title.replace(/^تقرير /, '')}
                     </span>
                     <span className="mt-0.5 block text-sm text-slate-500">{r.description}</span>

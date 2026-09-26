@@ -57,7 +57,7 @@ export async function createChildAccount(
   tx: Tx,
   parentKeyOrId: SystemAccountKey | number,
   name: string,
-  options?: { type?: AccountType; description?: string },
+  options?: { type?: AccountType; description?: string | null; isGroup?: boolean; code?: string | null },
 ) {
   const parent =
     typeof parentKeyOrId === 'number'
@@ -65,15 +65,23 @@ export async function createChildAccount(
       : await tx.account.findUnique({ where: { systemKey: parentKeyOrId } })
   if (!parent) throw new BusinessError('الحساب الرئيسي غير موجود')
   if (!parent.isGroup) throw new BusinessError('لا يمكن إضافة حساب فرعي تحت حساب غير تجميعي')
-  const code = await nextChildCode(tx, parent)
+  let code: string
+  if (options?.code) {
+    // رمز يدوي: أرقام فقط، يبدأ برمز الحساب الرئيسي، وغير مستخدم
+    code = options.code.trim()
+    if (!/^\d+$/.test(code) || !code.startsWith(parent.code) || code.length <= parent.code.length) {
+      throw new BusinessError(`الرمز يجب أن يكون أرقامًا ويبدأ برمز الحساب الرئيسي ${parent.code}`, { code: `يبدأ بـ ${parent.code}` })
+    }
+    if (await tx.account.findUnique({ where: { code }, select: { id: true } })) throw new BusinessError(`الرمز ${code} مستخدم`, { code: 'مستخدم' })
+  } else code = await nextChildCode(tx, parent)
   return tx.account.create({
     data: {
       code,
       name: name.trim(),
       type: options?.type ?? parent.type,
       parentId: parent.id,
-      isGroup: false,
-      description: options?.description,
+      isGroup: options?.isGroup ?? false,
+      description: options?.description ?? null,
     },
   })
 }

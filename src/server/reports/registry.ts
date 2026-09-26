@@ -6,6 +6,7 @@ import { expensesReport, profitLoss, revenuesReport } from './defs/pnl'
 import { advancesReport, employeesReport, payrollReport, suppliersReport } from './defs/staff'
 import { bankReport, cashboxReport } from './defs/treasury'
 import { byChargeType, byGrade, byStudent, byYear } from './defs/financial'
+import { balanceSheetReport, trialBalanceReport } from './defs/accounting'
 import { canSeeSalaries, type CurrentUser } from '../auth/guard'
 
 /** التقارير الـ 23 بالترتيب المطلوب. */
@@ -35,8 +36,11 @@ export const REPORTS: ReportDef[] = [
   byChargeType, // 23
 ]
 
+/** القوائم المحاسبية (خارج قائمة التقارير الـ 23 المرقمة، وتستخدم نفس المحرك). */
+export const ACCOUNTING_REPORTS: ReportDef[] = [trialBalanceReport, balanceSheetReport]
+
 export function getReport(id: string): ReportDef | null {
-  return REPORTS.find((r) => r.id === id) ?? null
+  return REPORTS.find((r) => r.id === id) ?? ACCOUNTING_REPORTS.find((r) => r.id === id) ?? null
 }
 
 /** هل يستطيع المستخدم فتح التقرير؟ (عرض التقارير + صلاحية التقرير + الرواتب إن لزم) */

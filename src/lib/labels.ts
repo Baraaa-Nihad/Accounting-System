@@ -177,7 +177,7 @@ export const JOURNAL_SOURCE: Record<string, string> = {
   PAYROLL: 'مسير رواتب',
   PAYROLL_CANCEL: 'إلغاء مسير رواتب',
   OPENING: 'رصيد افتتاحي',
-  YEAR_CLOSING: 'إقفال سنة',
+  YEAR_CLOSE: 'إقفال سنة',
   YEAR_REOPEN: 'إعادة فتح سنة',
   REVERSAL: 'قيد عكسي',
 }

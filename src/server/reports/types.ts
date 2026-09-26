@@ -105,7 +105,7 @@ export interface ReportResult {
   note?: string
 }
 
-export type ReportGroup = 'students' | 'documents' | 'pnl' | 'staff' | 'treasury' | 'financial'
+export type ReportGroup = 'students' | 'documents' | 'pnl' | 'staff' | 'treasury' | 'financial' | 'accounting'
 
 export const REPORT_GROUPS: Record<ReportGroup, string> = {
   students: 'الطلاب والتحصيل',
@@ -114,6 +114,7 @@ export const REPORT_GROUPS: Record<ReportGroup, string> = {
   staff: 'الموظفون والموردون',
   treasury: 'الخزينة',
   financial: 'التقارير المالية',
+  accounting: 'القوائم المحاسبية',
 }
 
 export interface ReportEnv {

@@ -3,6 +3,7 @@ import { Prisma } from '@/generated/prisma/client'
 import { db } from '../../db'
 import { accountByKey } from '../../ledger/accounts'
 import { sourceHref } from '../../ledger/statements'
+import { NOT_CLOSING_SQL } from '../../ledger/sources'
 import { D, sum } from '@/lib/money'
 import { ARABIC_MONTHS } from '@/lib/dates'
 import { andAll, d, dateRange, dt, empty, m, n, pct, sql } from '../sql'
@@ -10,8 +11,8 @@ import type { ReportDef, ReportFilters, ReportResult, Row } from '../types'
 
 /** التقارير 11، 12، 19: الإيرادات، المصروفات، الأرباح والخسائر (من الأستاذ العام — أساس الاستحقاق). */
 
-/** قيود إقفال السنة لا تدخل في قائمة الدخل. */
-const NOT_CLOSING = sql`je."sourceType" <> 'YEAR_CLOSE'`
+/** قيود إقفال السنة (وإعادة فتحها) لا تدخل في قائمة الدخل. */
+const NOT_CLOSING = NOT_CLOSING_SQL
 
 async function categoryReport(type: 'EXPENSE' | 'REVENUE', f: ReportFilters): Promise<ReportResult> {
   const sign = type === 'EXPENSE' ? sql`jl."debit" - jl."credit"` : sql`jl."credit" - jl."debit"`
@@ -64,7 +65,7 @@ async function categoryReport(type: 'EXPENSE' | 'REVENUE', f: ReportFilters): Pr
       FROM "accounts" a
       LEFT JOIN "accounts" p ON p."id" = a."parentId"
       LEFT JOIN "journal_lines" jl ON jl."accountId" = a."id" ${f.from ? sql`AND jl."date" >= ${dt(f.from)}` : empty} ${f.to ? sql`AND jl."date" <= ${dt(f.to)}` : empty}
-        AND jl."entryId" NOT IN (SELECT "id" FROM "journal_entries" WHERE "sourceType" = 'YEAR_CLOSE')
+        AND jl."entryId" NOT IN (SELECT je."id" FROM "journal_entries" je WHERE NOT (${NOT_CLOSING_SQL}))
       WHERE a."type"::text = ${type} AND a."isGroup" = false ${f.categoryId ? sql`AND a."id" = ${f.categoryId}` : empty}
       GROUP BY a."id", p."name"
       HAVING COUNT(jl."id") > 0 OR a."isActive" = true

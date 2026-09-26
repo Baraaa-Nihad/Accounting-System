@@ -1,6 +1,7 @@
 import 'server-only'
 import { Prisma } from '@/generated/prisma/client'
 import { db } from '../../db'
+import { NOT_CLOSING_SQL } from '../../ledger/sources'
 import { D } from '@/lib/money'
 import { addDays } from '@/lib/dates'
 import { PAYMENT_STATUS, YEAR_STATUS } from '@/lib/labels'
@@ -42,7 +43,7 @@ export const byYear: ReportDef = {
                COALESCE(SUM(CASE WHEN a."type" = 'EXPENSE' THEN jl."debit" - jl."credit" END), 0)::text AS expense
         FROM "academic_years" ay
         JOIN "journal_lines" jl ON jl."date" BETWEEN ay."startDate" AND ay."endDate"
-        JOIN "journal_entries" je ON je."id" = jl."entryId" AND je."sourceType" <> 'YEAR_CLOSE'
+        JOIN "journal_entries" je ON je."id" = jl."entryId" AND ${NOT_CLOSING_SQL}
         JOIN "accounts" a ON a."id" = jl."accountId" AND a."type" IN ('REVENUE', 'EXPENSE')
         WHERE ${cond}
         GROUP BY ay."id"`,
