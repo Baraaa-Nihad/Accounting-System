@@ -4,7 +4,7 @@ import { prepareSearchQuery } from '@/lib/arabic'
 import type { Permission } from '@/lib/permissions'
 
 export interface SearchResult {
-  type: 'student' | 'guardian' | 'receipt' | 'voucher' | 'employee' | 'supplier' | 'contractor'
+  type: 'student' | 'guardian' | 'receipt' | 'voucher' | 'bill' | 'transfer' | 'employee' | 'supplier' | 'contractor'
   id: number
   title: string
   subtitle?: string
@@ -111,6 +111,52 @@ export async function globalSearch(q: string, permissions: Set<Permission>): Pro
     )
   }
 
+  if (permissions.has('suppliers.view') && /\d/.test(q)) {
+    tasks.push(
+      db.supplierBill
+        .findMany({
+          where: { OR: [{ number: { contains: upper, mode: 'insensitive' } }, { supplierInvoiceNo: { contains: q.trim(), mode: 'insensitive' } }] },
+          include: { supplier: { select: { name: true } } },
+          take: 5,
+          orderBy: { id: 'desc' },
+        })
+        .then((rows) => {
+          for (const b of rows) {
+            results.push({
+              type: 'bill',
+              id: b.id,
+              title: b.number,
+              subtitle: `${b.supplier.name}${b.supplierInvoiceNo ? ` · فاتورة ${b.supplierInvoiceNo}` : ''}${b.status === 'CANCELLED' ? ' · ملغاة' : ''}`,
+              href: `/suppliers/bills/${b.id}`,
+            })
+          }
+        }),
+    )
+  }
+
+  if (permissions.has('treasury.view') && /\d/.test(q)) {
+    tasks.push(
+      db.cashTransfer
+        .findMany({
+          where: { number: { contains: upper, mode: 'insensitive' } },
+          include: { fromAccount: { select: { name: true } }, toAccount: { select: { name: true } } },
+          take: 5,
+          orderBy: { id: 'desc' },
+        })
+        .then((rows) => {
+          for (const t of rows) {
+            results.push({
+              type: 'transfer',
+              id: t.id,
+              title: t.number,
+              subtitle: `${t.fromAccount.name} ← ${t.toAccount.name}${t.status === 'CANCELLED' ? ' · ملغي' : ''}`,
+              href: `/treasury/transfers?highlight=${t.id}`,
+            })
+          }
+        }),
+    )
+  }
+
   if (permissions.has('employees.view')) {
     tasks.push(
       db.employee.findMany({ where: searchTextWhere(text, digits), take: 5 }).then((rows) => {
@@ -160,6 +206,6 @@ export async function globalSearch(q: string, permissions: Set<Permission>): Pro
   }
 
   await Promise.all(tasks)
-  const order = ['student', 'receipt', 'voucher', 'guardian', 'employee', 'supplier', 'contractor']
+  const order = ['student', 'receipt', 'voucher', 'bill', 'transfer', 'guardian', 'employee', 'supplier', 'contractor']
   return results.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
 }

@@ -4,10 +4,10 @@ import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { Command } from 'cmdk'
 import { Dialog as D } from 'radix-ui'
-import { Search, GraduationCap, Users, ArrowDownToLine, ArrowUpFromLine, UserRound, Truck, Hammer, Loader2 } from 'lucide-react'
+import { Search, GraduationCap, Users, ArrowDownToLine, ArrowUpFromLine, UserRound, Truck, Hammer, Loader2, FileText, ArrowLeftRight } from 'lucide-react'
 
 interface SearchResult {
-  type: 'student' | 'guardian' | 'receipt' | 'voucher' | 'employee' | 'supplier' | 'contractor'
+  type: 'student' | 'guardian' | 'receipt' | 'voucher' | 'bill' | 'transfer' | 'employee' | 'supplier' | 'contractor'
   id: number
   title: string
   subtitle?: string
@@ -19,6 +19,8 @@ const GROUPS: Record<SearchResult['type'], { label: string; icon: React.Componen
   guardian: { label: 'أولياء الأمور', icon: Users },
   receipt: { label: 'سندات القبض', icon: ArrowDownToLine },
   voucher: { label: 'سندات الصرف', icon: ArrowUpFromLine },
+  bill: { label: 'فواتير الموردين', icon: FileText },
+  transfer: { label: 'التحويلات', icon: ArrowLeftRight },
   employee: { label: 'الموظفون', icon: UserRound },
   supplier: { label: 'الموردون', icon: Truck },
   contractor: { label: 'العمال والمقاولون', icon: Hammer },
