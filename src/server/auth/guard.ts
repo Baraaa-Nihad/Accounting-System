@@ -1,7 +1,10 @@
 import 'server-only'
 import { cache } from 'react'
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { effectivePermissions, type Permission } from '@/lib/permissions'
+import { db } from '../db'
+import { audit } from '../audit'
+import { PERMISSIONS, effectivePermissions, type Permission } from '@/lib/permissions'
 import { getSetting } from '../settings'
 import type { Ctx } from '../context'
 import { BusinessError, PermissionError } from '../errors'
@@ -59,10 +62,31 @@ export async function requireUser(options?: { allowPasswordChange?: boolean }): 
   return user
 }
 
+/** تسجيل محاولة وصول مرفوضة في سجل النشاط (docs/04-roles-permissions.md §4.4). */
+async function logForbidden(user: CurrentUser, what: string, permissions: Permission[]) {
+  try {
+    const h = await headers()
+    if (h.get('next-router-prefetch') || h.get('purpose') === 'prefetch') return
+    const meta = await requestMeta()
+    await audit(db, { userId: user.id, userName: user.fullName, ip: meta.ip, userAgent: meta.userAgent, permissions: user.permissions }, {
+      action: 'forbidden',
+      entityType: 'System',
+      entityLabel: what,
+      summary: `محاولة ${what} بدون صلاحية (المطلوب: ${permissions.map((p) => PERMISSIONS[p]).join(' أو ')})`,
+    })
+  } catch (e) {
+    console.error('[forbidden log]', e)
+  }
+}
+
 /** للصفحات: يتطلب صلاحية واحدة على الأقل من المذكورة. */
 export async function requirePermission(...permissions: Permission[]): Promise<CurrentUser> {
   const user = await requireUser()
-  if (!permissions.some((p) => user.permissions.has(p))) redirect('/forbidden')
+  if (!permissions.some((p) => user.permissions.has(p))) {
+    const path = (await headers()).get('x-pathname') ?? ''
+    await logForbidden(user, `فتح الصفحة ${path}`.trim(), permissions)
+    redirect('/forbidden')
+  }
   return user
 }
 
@@ -74,7 +98,10 @@ export async function actionContext(...permissions: Permission[]): Promise<Ctx &
   const user = await getCurrentUser()
   if (!user) throw new BusinessError('انتهت الجلسة، يرجى تسجيل الدخول من جديد')
   if (user.mustChangePassword) throw new BusinessError('يجب تغيير كلمة المرور أولًا')
-  if (permissions.length > 0 && !permissions.some((p) => user.permissions.has(p))) throw new PermissionError()
+  if (permissions.length > 0 && !permissions.some((p) => user.permissions.has(p))) {
+    await logForbidden(user, 'تنفيذ عملية', permissions)
+    throw new PermissionError()
+  }
   const meta = await requestMeta()
   return {
     user,

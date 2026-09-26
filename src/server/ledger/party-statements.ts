@@ -10,7 +10,7 @@ import type { DateOnly } from '@/lib/dates'
  * نفس المحرك (statement) ونفس الواجهة والطباعة والتصدير.
  */
 
-export const STATEMENT_KINDS = ['cash', 'supplier', 'contractor', 'employee', 'account'] as const
+export const STATEMENT_KINDS = ['cash', 'supplier', 'contractor', 'employee', 'partner', 'account'] as const
 export type StatementKind = (typeof STATEMENT_KINDS)[number]
 
 export function isStatementKind(v: string): v is StatementKind {
@@ -25,7 +25,8 @@ export interface StatementTarget {
   details: { label: string; value: string }[]
   filter: Omit<StatementFilter, 'from' | 'to' | 'hideReversed'>
   sign: 1 | -1
-  permission: Permission
+  /** يكفي امتلاك أي منها */
+  permissions: Permission[]
   backHref: string
   legend: string
   balanceLabel: string
@@ -50,7 +51,7 @@ export async function statementTarget(client: DbOrTx, kind: StatementKind, id: n
         ],
         filter: { accountIds: [ca.glAccountId] },
         sign: 1,
-        permission: 'treasury.view',
+        permissions: ['treasury.view'],
         backHref: '/treasury',
         legend: 'مدين = مبالغ دخلت (مقبوضات وتحويلات واردة) · دائن = مبالغ خرجت (مدفوعات وتحويلات صادرة) · الرصيد = المتوفر',
         balanceLabel: 'الرصيد',
@@ -69,7 +70,7 @@ export async function statementTarget(client: DbOrTx, kind: StatementKind, id: n
         details: [...(s.category ? [{ label: 'التصنيف', value: s.category }] : []), ...(s.phone ? [{ label: 'الهاتف', value: s.phone }] : [])],
         filter: { accountIds: [await accountIdByKey(client, 'AP_SUPPLIERS')], supplierId: s.id },
         sign: -1,
-        permission: 'suppliers.view',
+        permissions: ['suppliers.view'],
         backHref: `/suppliers/${s.id}`,
         legend: 'دائن = فواتير مستحقة للمورد · مدين = دفعات للمورد · الرصيد الموجب = المستحق للمورد',
         balanceLabel: 'المستحق',
@@ -88,7 +89,7 @@ export async function statementTarget(client: DbOrTx, kind: StatementKind, id: n
         details: [...(c.specialty ? [{ label: 'التخصص', value: c.specialty }] : []), ...(c.phone ? [{ label: 'الهاتف', value: c.phone }] : [])],
         filter: { accountIds: [await accountIdByKey(client, 'AP_CONTRACTORS')], contractorId: c.id },
         sign: -1,
-        permission: 'contractors.view',
+        permissions: ['contractors.view'],
         backHref: `/contractors/${c.id}`,
         legend: 'دائن = قيمة الأعمال المتفق عليها · مدين = الدفعات · الرصيد الموجب = المتبقي له',
         balanceLabel: 'المتبقي له',
@@ -113,12 +114,31 @@ export async function statementTarget(client: DbOrTx, kind: StatementKind, id: n
           employeeId: e.id,
         },
         sign: -1,
-        permission: 'salaries.view',
+        permissions: ['salaries.view'],
         backHref: `/employees/${e.id}`,
         legend: 'دائن = رواتب مستحقة وخصومات السلف · مدين = رواتب مصروفة وسلف مستلمة · الرصيد الموجب = المستحق للموظف، السالب = سلف عليه',
         balanceLabel: 'المستحق',
         debitLabel: 'مدين',
         creditLabel: 'دائن',
+      }
+    }
+    case 'partner': {
+      const p = await client.partner.findUnique({ where: { id } })
+      if (!p) return null
+      return {
+        kind,
+        id,
+        title: 'كشف حساب شريك',
+        name: p.name,
+        details: [{ label: 'نسبة الملكية', value: `${p.ownershipPercent.toString()}%` }, ...(p.phone ? [{ label: 'الهاتف', value: p.phone }] : [])],
+        filter: { accountIds: [p.capitalAccountId, p.drawingsAccountId].filter((x): x is number => x !== null) },
+        sign: -1,
+        permissions: ['partners.manage', 'reports.financial'],
+        backHref: `/partners/${p.id}`,
+        legend: 'دائن = رأس مال مدفوع وحصة من الأرباح · مدين = مسحوبات الشريك · الرصيد = صافي حقوق الشريك',
+        balanceLabel: 'صافي الحقوق',
+        debitLabel: 'مسحوبات',
+        creditLabel: 'رأس مال',
       }
     }
     case 'account': {
@@ -134,7 +154,7 @@ export async function statementTarget(client: DbOrTx, kind: StatementKind, id: n
         details: [],
         filter: { accountIds: ids },
         sign: debitNature ? 1 : -1,
-        permission: 'accounting.view',
+        permissions: ['accounting.view'],
         backHref: '/accounting',
         legend: debitNature ? 'الرصيد = مدين − دائن' : 'الرصيد = دائن − مدين',
         balanceLabel: 'الرصيد',

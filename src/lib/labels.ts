@@ -123,6 +123,13 @@ export const OVERTIME_STATUS: Record<string, { label: string; tone: Tone }> = {
   CANCELLED: { label: 'ملغي', tone: 'gray' },
 }
 
+export const USER_STATE: Record<string, { label: string; tone: Tone }> = {
+  active: { label: 'فعّال', tone: 'green' },
+  must_change: { label: 'بانتظار تغيير كلمة المرور', tone: 'blue' },
+  locked: { label: 'مقفل مؤقتًا', tone: 'red' },
+  disabled: { label: 'معطّل', tone: 'gray' },
+}
+
 export const IMPORT_STATUS: Record<string, { label: string; tone: Tone }> = {
   PENDING: { label: 'بانتظار التأكيد', tone: 'amber' },
   COMPLETED: { label: 'تم الاستيراد', tone: 'green' },
@@ -202,6 +209,8 @@ export const AUDIT_ACTION: Record<string, string> = {
   status: 'تغيير حالة',
   settings: 'تعديل الإعدادات',
   recalculate: 'إعادة احتساب',
+  sessions: 'إنهاء جلسات',
+  forbidden: 'محاولة وصول مرفوضة',
 }
 
 export const ENTITY_LABEL: Record<string, string> = {

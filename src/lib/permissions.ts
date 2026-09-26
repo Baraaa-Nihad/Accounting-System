@@ -199,7 +199,7 @@ export const SYSTEM_ROLES: SystemRoleDef[] = [
     key: 'viewer',
     name: 'مستخدم للعرض فقط',
     description: 'يرى الشاشات والتقارير دون أي تعديل، ودون الرواتب.',
-    permissions: VIEW_ALL.filter((p) => p !== 'audit.view' && p !== 'accounting.view'),
+    permissions: VIEW_ALL.filter((p) => p !== 'audit.view' && p !== 'accounting.view' && p !== 'salaries.view'),
   },
 ]
 

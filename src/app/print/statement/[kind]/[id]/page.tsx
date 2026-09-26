@@ -19,7 +19,7 @@ export default async function PrintStatementPage({ params, searchParams }: PageP
   if (!isStatementKind(kind)) notFound()
   const target = await statementTarget(db, kind, Number(id))
   if (!target) notFound()
-  if (!user.permissions.has(target.permission)) redirect('/forbidden')
+  if (!target.permissions.some((x) => user.permissions.has(x))) redirect('/forbidden')
   const from = isDateOnly(firstParam(sp.from)) ? firstParam(sp.from)! : null
   const to = isDateOnly(firstParam(sp.to)) ? firstParam(sp.to)! : null
   const hide = firstParam(sp.hide) === '1'

@@ -18,8 +18,10 @@ export function NewReceiptPanel({
   revenueAccounts,
   partners,
   cashAccounts,
+  initialPartnerId,
 }: {
   initialMode: Mode
+  initialPartnerId?: number | null
   initialStudent: PickedStudent | null
   revenueAccounts: { id: number; name: string; code: string }[]
   partners: { id: number; name: string }[]
@@ -116,7 +118,7 @@ export function NewReceiptPanel({
         {mode === 'revenue' ? <OtherReceiptForm kind="OTHER_REVENUE" revenueAccounts={revenueAccounts} partners={partners} cashAccounts={cashAccounts} /> : null}
         {mode === 'partner' ? (
           partners.length ? (
-            <OtherReceiptForm kind="PARTNER_CAPITAL" revenueAccounts={revenueAccounts} partners={partners} cashAccounts={cashAccounts} />
+            <OtherReceiptForm kind="PARTNER_CAPITAL" revenueAccounts={revenueAccounts} partners={partners} cashAccounts={cashAccounts} initialPartnerId={initialPartnerId} />
           ) : (
             <p className="text-slate-500">لا يوجد شركاء مسجلون. أضف الشركاء من «المستخدمون والصلاحيات ← الشركاء».</p>
           )

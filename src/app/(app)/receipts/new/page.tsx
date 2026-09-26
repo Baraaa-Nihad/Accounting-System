@@ -27,6 +27,7 @@ export default async function NewReceiptPage({ searchParams }: PageProps<'/recei
       />
       <NewReceiptPanel
         initialMode={mode}
+        initialPartnerId={intParam(sp.partnerId) ?? null}
         initialStudent={student ? { id: student.id, fullName: student.fullName, studentNumber: student.studentNumber } : null}
         revenueAccounts={revenue.map((a) => ({ id: a.id, name: a.name, code: a.code }))}
         partners={partners.map((p) => ({ id: p.id, name: p.name }))}

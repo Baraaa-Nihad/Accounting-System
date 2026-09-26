@@ -41,6 +41,8 @@ export function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
+  // المسار الحالي لتسجيل محاولات الوصول المرفوضة في سجل النشاط
+  requestHeaders.set('x-pathname', `${pathname}${request.nextUrl.search}`.slice(0, 300))
   requestHeaders.set('Content-Security-Policy', csp)
 
   const response = NextResponse.next({ request: { headers: requestHeaders } })

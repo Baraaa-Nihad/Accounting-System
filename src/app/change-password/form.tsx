@@ -9,12 +9,16 @@ import { Field } from '@/components/ui/field'
 import { useAction } from '@/lib/use-action'
 import { changePasswordAction } from './actions'
 
-export function ChangePasswordForm() {
+/** redirectTo = null: البقاء في الصفحة وتفريغ الحقول بعد النجاح (صفحة «حسابي»). */
+export function ChangePasswordForm({ redirectTo = '/' }: { redirectTo?: string | null }) {
   const [values, setValues] = useState({ current: '', next: '', confirm: '' })
   const router = useRouter()
   const { run, pending, fieldErrors } = useAction(changePasswordAction, {
     refresh: false,
-    onSuccess: () => router.replace('/'),
+    onSuccess: () => {
+      if (redirectTo) router.replace(redirectTo)
+      else setValues({ current: '', next: '', confirm: '' })
+    },
   })
   const set = (k: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [k]: e.target.value }))
   return (
@@ -34,7 +38,7 @@ export function ChangePasswordForm() {
       <Field label="تأكيد كلمة المرور الجديدة" error={fieldErrors.confirm}>
         <Input type="password" value={values.confirm} onChange={set('confirm')} autoComplete="new-password" dir="ltr" required />
       </Field>
-      <Button type="submit" size="lg" className="w-full" loading={pending}>
+      <Button type="submit" size="lg" className={redirectTo ? 'w-full' : undefined} loading={pending}>
         {!pending ? <KeyRound /> : null}
         حفظ كلمة المرور
       </Button>

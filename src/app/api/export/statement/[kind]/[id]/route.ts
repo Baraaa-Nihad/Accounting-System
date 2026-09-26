@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/export/s
   if (!isStatementKind(kind)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const target = await statementTarget(db, kind, Number(id))
   if (!target) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!user.permissions.has(target.permission)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  if (!target.permissions.some((x) => user.permissions.has(x))) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   if (!user.permissions.has('reports.export')) return NextResponse.json({ error: 'لا تملك صلاحية التصدير' }, { status: 403 })
   const sp = request.nextUrl.searchParams
   const from = isDateOnly(sp.get('from')) ? sp.get('from') : null

@@ -58,6 +58,7 @@ export function VoucherForm({
   initialSupplierId,
   initialJobId,
   initialPayrollItemId,
+  initialPartnerId,
   initialStudent,
 }: {
   data: VoucherFormData
@@ -65,6 +66,7 @@ export function VoucherForm({
   initialSupplierId?: number | null
   initialJobId?: number | null
   initialPayrollItemId?: number | null
+  initialPartnerId?: number | null
   initialStudent?: PickedStudent | null
 }) {
   const { today } = useApp()
@@ -81,7 +83,7 @@ export function VoucherForm({
     expenseSupplierId: '',
     contractorJobId: initialJobId ? String(initialJobId) : '',
     payrollItemId: initialPayrollItemId ? String(initialPayrollItemId) : '',
-    partnerId: '',
+    partnerId: initialPartnerId ? String(initialPartnerId) : '',
     otherAccountId: '',
     referenceNumber: '',
     description: '',

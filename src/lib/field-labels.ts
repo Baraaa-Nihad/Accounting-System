@@ -50,6 +50,10 @@ const LABELS: Record<string, string> = {
   expenseAccountId: 'نوع المصروف',
   cancelReason: 'سبب الإلغاء',
   number: 'الرقم',
+  password: 'كلمة المرور',
+  userId: 'حساب المستخدم',
+  mustChangePassword: 'تغيير كلمة المرور إلزامي',
+  lockedUntil: 'مقفل حتى',
 }
 
 export function fieldLabel(field: string): string {

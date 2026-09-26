@@ -17,8 +17,10 @@ export function OtherReceiptForm({
   revenueAccounts,
   partners,
   cashAccounts,
+  initialPartnerId,
 }: {
   kind: 'OTHER_REVENUE' | 'PARTNER_CAPITAL'
+  initialPartnerId?: number | null
   revenueAccounts: { id: number; name: string; code: string }[]
   partners: { id: number; name: string }[]
   cashAccounts: { id: number; name: string; type: string; isDefault: boolean }[]
@@ -32,7 +34,7 @@ export function OtherReceiptForm({
     paymentMethod: 'CASH',
     cashAccountId: String(cashAccounts.find((c) => c.isDefault)?.id ?? cashAccounts[0]?.id ?? ''),
     revenueAccountId: '',
-    partnerId: '',
+    partnerId: initialPartnerId ? String(initialPartnerId) : '',
     description: '',
     notes: '',
     referenceNumber: '',

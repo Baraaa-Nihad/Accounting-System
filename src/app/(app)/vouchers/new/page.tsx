@@ -77,6 +77,7 @@ export default async function NewVoucherPage({ searchParams }: PageProps<'/vouch
         initialSupplierId={intParam(sp.supplierId) ?? null}
         initialJobId={intParam(sp.jobId) ?? null}
         initialPayrollItemId={intParam(sp.payrollItemId) ?? null}
+        initialPartnerId={intParam(sp.partnerId) ?? null}
         initialStudent={
           student ? { id: student.id, fullName: student.fullName, studentNumber: student.studentNumber, guardianName: student.guardian?.name ?? null } : null
         }
