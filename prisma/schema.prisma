@@ -1,0 +1,1306 @@
+// =====================================================================
+// نظام المحاسبة والإدارة المالية للمدرسة — مخطط قاعدة البيانات
+// الوثيقة الشارحة: docs/02-database-schema.md
+// قواعد: المبالغ NUMERIC(15,3) — التواريخ المالية DATE — لا حذف للحركات المالية
+// =====================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------
+// التعدادات
+// ---------------------------------------------------------------------
+
+enum StudentStatus {
+  ACTIVE
+  WITHDRAWN
+  GRADUATED
+  SUSPENDED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PROMOTED
+  REPEATED
+  GRADUATED
+  WITHDRAWN
+}
+
+enum YearStatus {
+  OPEN
+  CLOSED
+}
+
+enum DocStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum InstallmentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+enum DiscountMethod {
+  PERCENT
+  FIXED
+}
+
+enum DiscountScope {
+  CHARGE
+  CHARGE_TYPE
+  ACCOUNT
+}
+
+enum DiscountDistribution {
+  EVEN
+  FROM_LAST
+}
+
+enum PaymentMethod {
+  CASH
+  CHEQUE
+  BANK_TRANSFER
+  CARD
+  ELECTRONIC
+  OTHER
+}
+
+enum ReceiptKind {
+  STUDENT
+  FAMILY
+  OTHER_REVENUE
+  PARTNER_CAPITAL
+  OPENING_CREDIT
+}
+
+enum VoucherKind {
+  EXPENSE
+  SUPPLIER_PAYMENT
+  CONTRACTOR_PAYMENT
+  SALARY
+  ADVANCE
+  STUDENT_REFUND
+  PARTNER_WITHDRAWAL
+  OTHER
+}
+
+enum CashAccountType {
+  CASHBOX
+  BANK
+}
+
+enum ChequeDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum ChequeStatus {
+  IN_PORTFOLIO
+  CLEARED
+  BOUNCED
+  ISSUED
+  CANCELLED
+}
+
+enum SalaryType {
+  MONTHLY
+  DAILY
+  HOURLY
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PayrollStatus {
+  DRAFT
+  APPROVED
+  CANCELLED
+}
+
+enum AdvanceStatus {
+  ACTIVE
+  SETTLED
+  CANCELLED
+}
+
+enum JobStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum OvertimeStatus {
+  PENDING
+  INCLUDED
+  CANCELLED
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum JournalStatus {
+  POSTED
+  REVERSED
+}
+
+enum ImportStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+// ---------------------------------------------------------------------
+// المستخدمون والأمان
+// ---------------------------------------------------------------------
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  key         String?  @unique
+  name        String   @unique
+  description String?
+  permissions String[] @default([])
+  isSystem    Boolean  @default(false)
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("roles")
+}
+
+model User {
+  id                 Int       @id @default(autoincrement())
+  username           String    @unique
+  fullName           String
+  email              String?
+  phone              String?
+  passwordHash       String
+  roleId             Int
+  role               Role      @relation(fields: [roleId], references: [id])
+  extraPermissions   String[]  @default([])
+  revokedPermissions String[]  @default([])
+  isActive           Boolean   @default(true)
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  lastLoginIp        String?
+  passwordChangedAt  DateTime?
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  sessions          Session[]
+  partner           Partner?
+  receiptsCreated   Receipt[]        @relation("ReceiptCreatedBy")
+  receiptsCancelled Receipt[]        @relation("ReceiptCancelledBy")
+  vouchersCreated   PaymentVoucher[] @relation("VoucherCreatedBy")
+  vouchersCancelled PaymentVoucher[] @relation("VoucherCancelledBy")
+  chargesCreated    Charge[]         @relation("ChargeCreatedBy")
+  discountsCreated  Discount[]       @relation("DiscountCreatedBy")
+  transfersCreated  CashTransfer[]   @relation("TransferCreatedBy")
+  journalCreated    JournalEntry[]   @relation("JournalCreatedBy")
+  payrollCreated    PayrollRun[]     @relation("PayrollCreatedBy")
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+model Session {
+  id         String   @id // SHA-256 لرمز الجلسة (لا يُخزن الرمز نفسه)
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model LoginAttempt {
+  id        Int      @id @default(autoincrement())
+  username  String
+  userId    Int?
+  success   Boolean
+  reason    String?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([username, createdAt])
+  @@index([ip, createdAt])
+  @@index([createdAt])
+  @@map("login_attempts")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int?
+  user        User?    @relation(fields: [userId], references: [id])
+  userName    String?
+  action      String
+  entityType  String
+  entityId    String?
+  entityLabel String?
+  summary     String?
+  before      Json?
+  after       Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model Partner {
+  id                Int       @id @default(autoincrement())
+  name              String
+  phone             String?
+  email             String?
+  ownershipPercent  Decimal   @default(0) @db.Decimal(6, 3)
+  userId            Int?      @unique
+  user              User?     @relation(fields: [userId], references: [id])
+  isActive          Boolean   @default(true)
+  joinDate          DateTime? @db.Date
+  notes             String?
+  capitalAccountId  Int?      @unique
+  capitalAccount    Account?  @relation("PartnerCapital", fields: [capitalAccountId], references: [id])
+  drawingsAccountId Int?      @unique
+  drawingsAccount   Account?  @relation("PartnerDrawings", fields: [drawingsAccountId], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  receipts     Receipt[]
+  vouchers     PaymentVoucher[]
+  journalLines JournalLine[]
+
+  @@map("partners")
+}
+
+// ---------------------------------------------------------------------
+// الإعدادات والهيكل المدرسي
+// ---------------------------------------------------------------------
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model NumberSequence {
+  key       String   @id
+  lastValue Int      @default(0)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("number_sequences")
+}
+
+model AcademicYear {
+  id             Int        @id @default(autoincrement())
+  name           String     @unique
+  startDate      DateTime   @db.Date
+  endDate        DateTime   @db.Date
+  status         YearStatus @default(OPEN)
+  isCurrent      Boolean    @default(false)
+  closedAt       DateTime?
+  closedById     Int?
+  closingEntryId Int?
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  enrollments Enrollment[]
+  charges     Charge[]
+  feePlans    FeePlan[]
+  discounts   Discount[]
+  receipts    Receipt[]
+  vouchers    PaymentVoucher[]
+  transfers   CashTransfer[]
+  payrollRuns PayrollRun[]
+  journal     JournalEntry[]
+  jobs        ContractorJob[]
+  bills       SupplierBill[]
+
+  @@map("academic_years")
+}
+
+model Stage {
+  id        Int     @id @default(autoincrement())
+  name      String  @unique
+  sortOrder Int     @default(0)
+  grades    Grade[]
+
+  @@map("stages")
+}
+
+model Grade {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  stageId     Int?
+  stage       Stage?       @relation(fields: [stageId], references: [id])
+  sortOrder   Int          @default(0)
+  nextGradeId Int?
+  nextGrade   Grade?       @relation("GradePromotion", fields: [nextGradeId], references: [id])
+  prevGrades  Grade[]      @relation("GradePromotion")
+  isActive    Boolean      @default(true)
+  sections    Section[]
+  enrollments Enrollment[]
+  feePlans    FeePlan[]
+
+  @@map("grades")
+}
+
+model Section {
+  id          Int          @id @default(autoincrement())
+  gradeId     Int
+  grade       Grade        @relation(fields: [gradeId], references: [id])
+  name        String
+  enrollments Enrollment[]
+
+  @@unique([gradeId, name])
+  @@map("sections")
+}
+
+// ---------------------------------------------------------------------
+// الطلاب وأولياء الأمور
+// ---------------------------------------------------------------------
+
+model Guardian {
+  id         Int      @id @default(autoincrement())
+  name       String
+  phone      String?
+  phone2     String?
+  relation   String?
+  nationalId String?
+  email      String?
+  address    String?
+  notes      String?
+  searchText String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  students Student[]
+  receipts Receipt[]
+
+  @@index([phone])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("guardians")
+}
+
+model Student {
+  id              Int           @id @default(autoincrement())
+  studentNumber   String        @unique
+  schoolNumber    String?       @unique
+  fullName        String
+  gender          Gender?
+  birthDate       DateTime?     @db.Date
+  nationalId      String?
+  guardianId      Int?
+  guardian        Guardian?     @relation(fields: [guardianId], references: [id])
+  status          StudentStatus @default(ACTIVE)
+  statusChangedAt DateTime?
+  statusReason    String?
+  joinDate        DateTime?     @db.Date
+  address         String?
+  notes           String?
+  searchText      String        @default("")
+  importBatchId   Int?
+  createdById     Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  enrollments   Enrollment[]
+  charges       Charge[]
+  installments  Installment[]
+  discounts     Discount[]
+  discountRules StudentDiscountRule[]
+  receipts      Receipt[]
+  allocations   PaymentAllocation[]
+  refunds       PaymentVoucher[]
+  journalLines  JournalLine[]
+
+  @@index([guardianId])
+  @@index([status])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("students")
+}
+
+model Enrollment {
+  id             Int              @id @default(autoincrement())
+  studentId      Int
+  student        Student          @relation(fields: [studentId], references: [id])
+  academicYearId Int
+  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id])
+  gradeId        Int
+  grade          Grade            @relation(fields: [gradeId], references: [id])
+  sectionId      Int?
+  section        Section?         @relation(fields: [sectionId], references: [id])
+  status         EnrollmentStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([studentId, academicYearId])
+  @@index([academicYearId, gradeId])
+  @@map("enrollments")
+}
+
+// ---------------------------------------------------------------------
+// الذمم والأقساط والخصومات
+// ---------------------------------------------------------------------
+
+model ChargeType {
+  id                Int      @id @default(autoincrement())
+  name              String   @unique
+  revenueAccountId  Int
+  revenueAccount    Account  @relation("ChargeTypeRevenue", fields: [revenueAccountId], references: [id])
+  defaultAmount     Decimal? @db.Decimal(15, 3)
+  allowInstallments Boolean  @default(false)
+  systemKey         String?  @unique
+  isActive          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  description       String?
+  createdAt         DateTime @default(now())
+
+  charges   Charge[]
+  feePlans  FeePlan[]
+  discounts Discount[]
+  rules     StudentDiscountRule[]
+
+  @@map("charge_types")
+}
+
+model FeePlan {
+  id                Int          @id @default(autoincrement())
+  academicYearId    Int
+  academicYear      AcademicYear @relation(fields: [academicYearId], references: [id])
+  gradeId           Int
+  grade             Grade        @relation(fields: [gradeId], references: [id])
+  chargeTypeId      Int
+  chargeType        ChargeType   @relation(fields: [chargeTypeId], references: [id])
+  amount            Decimal      @db.Decimal(15, 3)
+  installmentsCount Int          @default(1)
+  firstDueDate      DateTime?    @db.Date
+  dueDay            Int?
+  isActive          Boolean      @default(true)
+  notes             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([academicYearId, gradeId, chargeTypeId])
+  @@map("fee_plans")
+}
+
+model Charge {
+  id               Int           @id @default(autoincrement())
+  studentId        Int
+  student          Student       @relation(fields: [studentId], references: [id])
+  chargeTypeId     Int
+  chargeType       ChargeType    @relation(fields: [chargeTypeId], references: [id])
+  academicYearId   Int
+  academicYear     AcademicYear  @relation(fields: [academicYearId], references: [id])
+  date             DateTime      @db.Date
+  description      String?
+  notes            String?
+  grossAmount      Decimal       @db.Decimal(15, 3)
+  discountAmount   Decimal       @default(0) @db.Decimal(15, 3)
+  netAmount        Decimal       @db.Decimal(15, 3)
+  paidAmount       Decimal       @default(0) @db.Decimal(15, 3)
+  paymentStatus    PaymentStatus @default(UNPAID)
+  isInstallment    Boolean       @default(false)
+  installmentCount Int           @default(1)
+  status           DocStatus     @default(ACTIVE)
+  cancelledAt      DateTime?
+  cancelledById    Int?
+  cancelReason     String?
+  bulkBatchId      String?
+  journalEntryId   Int?
+  importBatchId    Int?
+  createdById      Int?
+  createdBy        User?         @relation("ChargeCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  installments         Installment[]
+  discountApplications DiscountApplication[]
+  directDiscounts      Discount[]
+  allocations          PaymentAllocation[]
+
+  @@index([studentId, academicYearId])
+  @@index([chargeTypeId])
+  @@index([academicYearId, status])
+  @@index([bulkBatchId])
+  @@map("charges")
+}
+
+model Installment {
+  id             Int               @id @default(autoincrement())
+  chargeId       Int
+  charge         Charge            @relation(fields: [chargeId], references: [id])
+  studentId      Int
+  student        Student           @relation(fields: [studentId], references: [id])
+  academicYearId Int
+  number         Int
+  dueDate        DateTime          @db.Date
+  amount         Decimal           @db.Decimal(15, 3)
+  paidAmount     Decimal           @default(0) @db.Decimal(15, 3)
+  status         InstallmentStatus @default(UNPAID)
+  paidAt         DateTime?         @db.Date
+  cancelledAt    DateTime?
+  cancelReason   String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  allocations PaymentAllocation[]
+
+  @@unique([chargeId, number])
+  @@index([dueDate, status])
+  @@index([studentId, status])
+  @@map("installments")
+}
+
+model DiscountType {
+  id            Int             @id @default(autoincrement())
+  name          String          @unique
+  description   String?
+  defaultMethod DiscountMethod?
+  defaultValue  Decimal?        @db.Decimal(15, 3)
+  isActive      Boolean         @default(true)
+  sortOrder     Int             @default(0)
+
+  discounts Discount[]
+  rules     StudentDiscountRule[]
+
+  @@map("discount_types")
+}
+
+model Discount {
+  id             Int                  @id @default(autoincrement())
+  studentId      Int
+  student        Student              @relation(fields: [studentId], references: [id])
+  discountTypeId Int?
+  discountType   DiscountType?        @relation(fields: [discountTypeId], references: [id])
+  academicYearId Int
+  academicYear   AcademicYear         @relation(fields: [academicYearId], references: [id])
+  scope          DiscountScope
+  chargeId       Int?
+  charge         Charge?              @relation(fields: [chargeId], references: [id])
+  chargeTypeId   Int?
+  chargeType     ChargeType?          @relation(fields: [chargeTypeId], references: [id])
+  method         DiscountMethod
+  value          Decimal              @db.Decimal(15, 3)
+  distribution   DiscountDistribution @default(EVEN)
+  baseAmount     Decimal              @db.Decimal(15, 3)
+  amount         Decimal              @db.Decimal(15, 3)
+  netAmount      Decimal              @db.Decimal(15, 3)
+  reason         String
+  approvedBy     String?
+  ruleId         Int?
+  date           DateTime             @db.Date
+  status         DocStatus            @default(ACTIVE)
+  cancelledAt    DateTime?
+  cancelledById  Int?
+  cancelReason   String?
+  journalEntryId Int?
+  createdById    Int?
+  createdBy      User?                @relation("DiscountCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime             @default(now())
+
+  applications DiscountApplication[]
+
+  @@index([studentId])
+  @@index([date])
+  @@map("discounts")
+}
+
+model DiscountApplication {
+  id         Int      @id @default(autoincrement())
+  discountId Int
+  discount   Discount @relation(fields: [discountId], references: [id])
+  chargeId   Int
+  charge     Charge   @relation(fields: [chargeId], references: [id])
+  baseAmount Decimal  @db.Decimal(15, 3)
+  amount     Decimal  @db.Decimal(15, 3)
+
+  @@index([chargeId])
+  @@index([discountId])
+  @@map("discount_applications")
+}
+
+model StudentDiscountRule {
+  id             Int            @id @default(autoincrement())
+  studentId      Int
+  student        Student        @relation(fields: [studentId], references: [id])
+  discountTypeId Int?
+  discountType   DiscountType?  @relation(fields: [discountTypeId], references: [id])
+  chargeTypeId   Int?
+  chargeType     ChargeType?    @relation(fields: [chargeTypeId], references: [id])
+  academicYearId Int?
+  method         DiscountMethod
+  value          Decimal        @db.Decimal(15, 3)
+  reason         String
+  approvedBy     String?
+  isActive       Boolean        @default(true)
+  createdById    Int?
+  createdAt      DateTime       @default(now())
+
+  @@index([studentId])
+  @@map("student_discount_rules")
+}
+
+// ---------------------------------------------------------------------
+// الخزينة: الصناديق والبنوك، القبض، الصرف، الشيكات، التحويلات
+// ---------------------------------------------------------------------
+
+model CashAccount {
+  id              Int             @id @default(autoincrement())
+  name            String          @unique
+  type            CashAccountType
+  bankName        String?
+  accountNumber   String?
+  iban            String?
+  glAccountId     Int             @unique
+  glAccount       Account         @relation("CashAccountGl", fields: [glAccountId], references: [id])
+  lowBalanceAlert Decimal?        @db.Decimal(15, 3)
+  isActive        Boolean         @default(true)
+  isDefault       Boolean         @default(false)
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  receipts      Receipt[]
+  vouchers      PaymentVoucher[]
+  transfersFrom CashTransfer[]   @relation("TransferFrom")
+  transfersTo   CashTransfer[]   @relation("TransferTo")
+  cheques       Cheque[]
+
+  @@map("cash_accounts")
+}
+
+model Receipt {
+  id               Int           @id @default(autoincrement())
+  number           String        @unique
+  kind             ReceiptKind
+  date             DateTime      @db.Date
+  academicYearId   Int
+  academicYear     AcademicYear  @relation(fields: [academicYearId], references: [id])
+  payerName        String
+  studentId        Int?
+  student          Student?      @relation(fields: [studentId], references: [id])
+  guardianId       Int?
+  guardian         Guardian?     @relation(fields: [guardianId], references: [id])
+  partnerId        Int?
+  partner          Partner?      @relation(fields: [partnerId], references: [id])
+  amount           Decimal       @db.Decimal(15, 3)
+  paymentMethod    PaymentMethod
+  cashAccountId    Int?
+  cashAccount      CashAccount?  @relation(fields: [cashAccountId], references: [id])
+  revenueAccountId Int?
+  revenueAccount   Account?      @relation("ReceiptRevenue", fields: [revenueAccountId], references: [id])
+  referenceNumber  String?
+  description      String?
+  notes            String?
+  status           DocStatus     @default(ACTIVE)
+  cancelledAt      DateTime?
+  cancelledById    Int?
+  cancelledBy      User?         @relation("ReceiptCancelledBy", fields: [cancelledById], references: [id])
+  cancelReason     String?
+  journalEntryId   Int?
+  reversalEntryId  Int?
+  importBatchId    Int?
+  createdById      Int?
+  createdBy        User?         @relation("ReceiptCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  allocations PaymentAllocation[]
+  cheque      Cheque?
+
+  @@index([date])
+  @@index([studentId])
+  @@index([guardianId])
+  @@index([status, date])
+  @@map("receipts")
+}
+
+model PaymentAllocation {
+  id              Int             @id @default(autoincrement())
+  receiptId       Int
+  receipt         Receipt         @relation(fields: [receiptId], references: [id])
+  studentId       Int
+  student         Student         @relation(fields: [studentId], references: [id])
+  chargeId        Int?
+  charge          Charge?         @relation(fields: [chargeId], references: [id])
+  installmentId   Int?
+  installment     Installment?    @relation(fields: [installmentId], references: [id])
+  refundVoucherId Int?
+  refundVoucher   PaymentVoucher? @relation(fields: [refundVoucherId], references: [id])
+  amount          Decimal         @db.Decimal(15, 3)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([receiptId])
+  @@index([studentId])
+  @@index([installmentId])
+  @@index([chargeId])
+  @@index([refundVoucherId])
+  @@map("payment_allocations")
+}
+
+model Cheque {
+  id               Int             @id @default(autoincrement())
+  direction        ChequeDirection
+  number           String
+  bankName         String?
+  dueDate          DateTime        @db.Date
+  amount           Decimal         @db.Decimal(15, 3)
+  partyName        String?
+  status           ChequeStatus
+  receiptId        Int?            @unique
+  receipt          Receipt?        @relation(fields: [receiptId], references: [id])
+  voucherId        Int?            @unique
+  voucher          PaymentVoucher? @relation(fields: [voucherId], references: [id])
+  depositAccountId Int?
+  depositAccount   CashAccount?    @relation(fields: [depositAccountId], references: [id])
+  clearedAt        DateTime?       @db.Date
+  bouncedAt        DateTime?       @db.Date
+  bounceReason     String?
+  clearingEntryId  Int?
+  notes            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([status, dueDate])
+  @@map("cheques")
+}
+
+model PaymentVoucher {
+  id               Int              @id @default(autoincrement())
+  number           String           @unique
+  kind             VoucherKind
+  date             DateTime         @db.Date
+  academicYearId   Int
+  academicYear     AcademicYear     @relation(fields: [academicYearId], references: [id])
+  payeeName        String
+  amount           Decimal          @db.Decimal(15, 3)
+  paymentMethod    PaymentMethod
+  cashAccountId    Int
+  cashAccount      CashAccount      @relation(fields: [cashAccountId], references: [id])
+  expenseAccountId Int?
+  expenseAccount   Account?         @relation("VoucherExpense", fields: [expenseAccountId], references: [id])
+  supplierId       Int?
+  supplier         Supplier?        @relation(fields: [supplierId], references: [id])
+  contractorId     Int?
+  contractor       Contractor?      @relation(fields: [contractorId], references: [id])
+  contractorJobId  Int?
+  contractorJob    ContractorJob?   @relation(fields: [contractorJobId], references: [id])
+  employeeId       Int?
+  employee         Employee?        @relation(fields: [employeeId], references: [id])
+  payrollItemId    Int?
+  payrollItem      PayrollItem?     @relation(fields: [payrollItemId], references: [id])
+  advanceId        Int?             @unique
+  advance          EmployeeAdvance? @relation(fields: [advanceId], references: [id])
+  studentId        Int?
+  student          Student?         @relation(fields: [studentId], references: [id])
+  partnerId        Int?
+  partner          Partner?         @relation(fields: [partnerId], references: [id])
+  referenceNumber  String?
+  description      String?
+  notes            String?
+  status           DocStatus        @default(ACTIVE)
+  cancelledAt      DateTime?
+  cancelledById    Int?
+  cancelledBy      User?            @relation("VoucherCancelledBy", fields: [cancelledById], references: [id])
+  cancelReason     String?
+  journalEntryId   Int?
+  reversalEntryId  Int?
+  importBatchId    Int?
+  createdById      Int?
+  createdBy        User?            @relation("VoucherCreatedBy", fields: [createdById], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  cheque            Cheque?
+  refundAllocations PaymentAllocation[]
+
+  @@index([date])
+  @@index([kind, date])
+  @@index([status, date])
+  @@index([supplierId])
+  @@index([employeeId])
+  @@index([contractorId])
+  @@map("payment_vouchers")
+}
+
+model CashTransfer {
+  id              Int          @id @default(autoincrement())
+  number          String       @unique
+  date            DateTime     @db.Date
+  academicYearId  Int
+  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id])
+  fromAccountId   Int
+  fromAccount     CashAccount  @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccountId     Int
+  toAccount       CashAccount  @relation("TransferTo", fields: [toAccountId], references: [id])
+  amount          Decimal      @db.Decimal(15, 3)
+  description     String?
+  notes           String?
+  status          DocStatus    @default(ACTIVE)
+  cancelledAt     DateTime?
+  cancelledById   Int?
+  cancelReason    String?
+  journalEntryId  Int?
+  reversalEntryId Int?
+  createdById     Int?
+  createdBy       User?        @relation("TransferCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime     @default(now())
+
+  @@index([date])
+  @@map("cash_transfers")
+}
+
+// ---------------------------------------------------------------------
+// الموردون والمقاولون
+// ---------------------------------------------------------------------
+
+model Supplier {
+  id            Int      @id @default(autoincrement())
+  name          String
+  category      String?
+  phone         String?
+  email         String?
+  contactPerson String?
+  address       String?
+  taxNumber     String?
+  notes         String?
+  isActive      Boolean  @default(true)
+  searchText    String   @default("")
+  importBatchId Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  bills        SupplierBill[]
+  vouchers     PaymentVoucher[]
+  journalLines JournalLine[]
+
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("suppliers")
+}
+
+model SupplierBill {
+  id                Int          @id @default(autoincrement())
+  number            String       @unique
+  supplierInvoiceNo String?
+  supplierId        Int
+  supplier          Supplier     @relation(fields: [supplierId], references: [id])
+  date              DateTime     @db.Date
+  dueDate           DateTime?    @db.Date
+  academicYearId    Int
+  academicYear      AcademicYear @relation(fields: [academicYearId], references: [id])
+  expenseAccountId  Int
+  expenseAccount    Account      @relation("BillExpense", fields: [expenseAccountId], references: [id])
+  amount            Decimal      @db.Decimal(15, 3)
+  description       String?
+  notes             String?
+  isOpening         Boolean      @default(false)
+  status            DocStatus    @default(ACTIVE)
+  cancelledAt       DateTime?
+  cancelledById     Int?
+  cancelReason      String?
+  journalEntryId    Int?
+  reversalEntryId   Int?
+  createdById       Int?
+  createdAt         DateTime     @default(now())
+
+  @@index([supplierId])
+  @@index([date])
+  @@map("supplier_bills")
+}
+
+model Contractor {
+  id         Int      @id @default(autoincrement())
+  name       String
+  specialty  String?
+  phone      String?
+  nationalId String?
+  notes      String?
+  isActive   Boolean  @default(true)
+  searchText String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  jobs         ContractorJob[]
+  vouchers     PaymentVoucher[]
+  journalLines JournalLine[]
+
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("contractors")
+}
+
+model ContractorJob {
+  id               Int          @id @default(autoincrement())
+  contractorId     Int
+  contractor       Contractor   @relation(fields: [contractorId], references: [id])
+  description      String
+  agreedAmount     Decimal      @db.Decimal(15, 3)
+  paidAmount       Decimal      @default(0) @db.Decimal(15, 3)
+  startDate        DateTime     @db.Date
+  endDate          DateTime?    @db.Date
+  academicYearId   Int
+  academicYear     AcademicYear @relation(fields: [academicYearId], references: [id])
+  expenseAccountId Int
+  expenseAccount   Account      @relation("JobExpense", fields: [expenseAccountId], references: [id])
+  status           JobStatus    @default(OPEN)
+  notes            String?
+  journalEntryId   Int?
+  createdById      Int?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  vouchers PaymentVoucher[]
+
+  @@index([contractorId])
+  @@map("contractor_jobs")
+}
+
+// ---------------------------------------------------------------------
+// الموظفون والرواتب
+// ---------------------------------------------------------------------
+
+model Employee {
+  id             Int            @id @default(autoincrement())
+  employeeNumber String         @unique
+  fullName       String
+  phone          String?
+  jobTitle       String?
+  department     String?
+  isTeacher      Boolean        @default(false)
+  gender         Gender?
+  nationalId     String?
+  hireDate       DateTime?      @db.Date
+  salaryType     SalaryType     @default(MONTHLY)
+  baseSalary     Decimal        @default(0) @db.Decimal(15, 3)
+  overtimeRate   Decimal?       @db.Decimal(15, 3)
+  bankName       String?
+  bankAccount    String?
+  iban           String?
+  address        String?
+  status         EmployeeStatus @default(ACTIVE)
+  endDate        DateTime?      @db.Date
+  notes          String?
+  searchText     String         @default("")
+  importBatchId  Int?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  overtime     OvertimeEntry[]
+  advances     EmployeeAdvance[]
+  payrollItems PayrollItem[]
+  vouchers     PaymentVoucher[]
+  journalLines JournalLine[]
+
+  @@index([status])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("employees")
+}
+
+model OvertimeEntry {
+  id            Int            @id @default(autoincrement())
+  employeeId    Int
+  employee      Employee       @relation(fields: [employeeId], references: [id])
+  date          DateTime       @db.Date
+  hours         Decimal        @db.Decimal(8, 2)
+  rate          Decimal        @db.Decimal(15, 3)
+  amount        Decimal        @db.Decimal(15, 3)
+  reason        String?
+  notes         String?
+  status        OvertimeStatus @default(PENDING)
+  payrollItemId Int?
+  payrollItem   PayrollItem?   @relation(fields: [payrollItemId], references: [id])
+  createdById   Int?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([employeeId, date])
+  @@index([status])
+  @@map("overtime_entries")
+}
+
+model EmployeeAdvance {
+  id                Int           @id @default(autoincrement())
+  employeeId        Int
+  employee          Employee      @relation(fields: [employeeId], references: [id])
+  date              DateTime      @db.Date
+  amount            Decimal       @db.Decimal(15, 3)
+  installmentsCount Int           @default(1)
+  monthlyDeduction  Decimal       @db.Decimal(15, 3)
+  startYear         Int
+  startMonth        Int
+  deductedAmount    Decimal       @default(0) @db.Decimal(15, 3)
+  status            AdvanceStatus @default(ACTIVE)
+  reason            String?
+  notes             String?
+  createdById       Int?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  voucher    PaymentVoucher?
+  deductions AdvanceDeduction[]
+
+  @@index([employeeId, status])
+  @@map("employee_advances")
+}
+
+model AdvanceDeduction {
+  id            Int             @id @default(autoincrement())
+  advanceId     Int
+  advance       EmployeeAdvance @relation(fields: [advanceId], references: [id])
+  payrollItemId Int
+  payrollItem   PayrollItem     @relation(fields: [payrollItemId], references: [id])
+  amount        Decimal         @db.Decimal(15, 3)
+  createdAt     DateTime        @default(now())
+
+  @@index([advanceId])
+  @@index([payrollItemId])
+  @@map("advance_deductions")
+}
+
+model PayrollRun {
+  id              Int           @id @default(autoincrement())
+  year            Int
+  month           Int
+  academicYearId  Int
+  academicYear    AcademicYear  @relation(fields: [academicYearId], references: [id])
+  status          PayrollStatus @default(DRAFT)
+  postingDate     DateTime      @db.Date
+  totalGross      Decimal       @default(0) @db.Decimal(15, 3)
+  totalDeductions Decimal       @default(0) @db.Decimal(15, 3)
+  totalNet        Decimal       @default(0) @db.Decimal(15, 3)
+  totalPaid       Decimal       @default(0) @db.Decimal(15, 3)
+  approvedAt      DateTime?
+  approvedById    Int?
+  cancelledAt     DateTime?
+  cancelledById   Int?
+  cancelReason    String?
+  journalEntryId  Int?
+  reversalEntryId Int?
+  notes           String?
+  createdById     Int?
+  createdBy       User?         @relation("PayrollCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  items PayrollItem[]
+
+  @@index([year, month])
+  @@map("payroll_runs")
+}
+
+model PayrollItem {
+  id               Int           @id @default(autoincrement())
+  payrollRunId     Int
+  payrollRun       PayrollRun    @relation(fields: [payrollRunId], references: [id])
+  employeeId       Int
+  employee         Employee      @relation(fields: [employeeId], references: [id])
+  salaryType       SalaryType
+  rate             Decimal       @db.Decimal(15, 3)
+  workDays         Decimal       @default(0) @db.Decimal(8, 2)
+  workHours        Decimal       @default(0) @db.Decimal(8, 2)
+  basicPay         Decimal       @default(0) @db.Decimal(15, 3)
+  absenceDays      Decimal       @default(0) @db.Decimal(8, 2)
+  absenceDeduction Decimal       @default(0) @db.Decimal(15, 3)
+  lateHours        Decimal       @default(0) @db.Decimal(8, 2)
+  lateDeduction    Decimal       @default(0) @db.Decimal(15, 3)
+  overtimeHours    Decimal       @default(0) @db.Decimal(8, 2)
+  overtimeAmount   Decimal       @default(0) @db.Decimal(15, 3)
+  bonuses          Decimal       @default(0) @db.Decimal(15, 3)
+  allowances       Decimal       @default(0) @db.Decimal(15, 3)
+  otherDeductions  Decimal       @default(0) @db.Decimal(15, 3)
+  withholdings     Decimal       @default(0) @db.Decimal(15, 3)
+  advanceDeduction Decimal       @default(0) @db.Decimal(15, 3)
+  grossPay         Decimal       @default(0) @db.Decimal(15, 3)
+  totalDeductions  Decimal       @default(0) @db.Decimal(15, 3)
+  netPay           Decimal       @default(0) @db.Decimal(15, 3)
+  paidAmount       Decimal       @default(0) @db.Decimal(15, 3)
+  paymentStatus    PaymentStatus @default(UNPAID)
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  overtimeEntries   OvertimeEntry[]
+  advanceDeductions AdvanceDeduction[]
+  vouchers          PaymentVoucher[]
+
+  @@unique([payrollRunId, employeeId])
+  @@index([employeeId])
+  @@map("payroll_items")
+}
+
+// ---------------------------------------------------------------------
+// المحاسبة العامة
+// ---------------------------------------------------------------------
+
+model Account {
+  id          Int         @id @default(autoincrement())
+  code        String      @unique
+  name        String
+  type        AccountType
+  parentId    Int?
+  parent      Account?    @relation("AccountTree", fields: [parentId], references: [id])
+  children    Account[]   @relation("AccountTree")
+  isGroup     Boolean     @default(false)
+  systemKey   String?     @unique
+  isSystem    Boolean     @default(false)
+  isActive    Boolean     @default(true)
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  lines           JournalLine[]
+  chargeTypes     ChargeType[]     @relation("ChargeTypeRevenue")
+  cashAccount     CashAccount?     @relation("CashAccountGl")
+  receipts        Receipt[]        @relation("ReceiptRevenue")
+  vouchers        PaymentVoucher[] @relation("VoucherExpense")
+  bills           SupplierBill[]   @relation("BillExpense")
+  jobs            ContractorJob[]  @relation("JobExpense")
+  partnerCapital  Partner?         @relation("PartnerCapital")
+  partnerDrawings Partner?         @relation("PartnerDrawings")
+
+  @@index([parentId])
+  @@index([type])
+  @@map("accounts")
+}
+
+model JournalEntry {
+  id             Int           @id @default(autoincrement())
+  number         String        @unique
+  date           DateTime      @db.Date
+  academicYearId Int?
+  academicYear   AcademicYear? @relation(fields: [academicYearId], references: [id])
+  description    String
+  sourceType     String
+  sourceId       Int?
+  status         JournalStatus @default(POSTED)
+  reversalOfId   Int?          @unique
+  reversalOf     JournalEntry? @relation("Reversal", fields: [reversalOfId], references: [id])
+  reversedBy     JournalEntry? @relation("Reversal")
+  totalAmount    Decimal       @db.Decimal(15, 3)
+  createdById    Int?
+  createdBy      User?         @relation("JournalCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+
+  lines JournalLine[]
+
+  @@index([date])
+  @@index([sourceType, sourceId])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id           Int          @id @default(autoincrement())
+  entryId      Int
+  entry        JournalEntry @relation(fields: [entryId], references: [id])
+  accountId    Int
+  account      Account      @relation(fields: [accountId], references: [id])
+  date         DateTime     @db.Date
+  debit        Decimal      @default(0) @db.Decimal(15, 3)
+  credit       Decimal      @default(0) @db.Decimal(15, 3)
+  description  String?
+  lineOrder    Int          @default(0)
+  studentId    Int?
+  student      Student?     @relation(fields: [studentId], references: [id])
+  employeeId   Int?
+  employee     Employee?    @relation(fields: [employeeId], references: [id])
+  supplierId   Int?
+  supplier     Supplier?    @relation(fields: [supplierId], references: [id])
+  contractorId Int?
+  contractor   Contractor?  @relation(fields: [contractorId], references: [id])
+  partnerId    Int?
+  partner      Partner?     @relation(fields: [partnerId], references: [id])
+
+  @@index([entryId])
+  @@index([accountId, date])
+  @@index([studentId, date])
+  @@index([employeeId, date])
+  @@index([supplierId, date])
+  @@index([contractorId, date])
+  @@index([partnerId])
+  @@map("journal_lines")
+}
+
+// ---------------------------------------------------------------------
+// المرفقات والاستيراد
+// ---------------------------------------------------------------------
+
+model Attachment {
+  id           Int       @id @default(autoincrement())
+  entityType   String
+  entityId     Int
+  fileName     String    @unique
+  originalName String
+  mimeType     String
+  size         Int
+  description  String?
+  uploadedById Int?
+  deletedAt    DateTime?
+  deletedById  Int?
+  createdAt    DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@map("attachments")
+}
+
+model ImportBatch {
+  id           Int          @id @default(autoincrement())
+  type         String
+  fileName     String
+  status       ImportStatus @default(PENDING)
+  headers      Json?
+  rows         Json?
+  mapping      Json?
+  options      Json?
+  result       Json?
+  totalRows    Int          @default(0)
+  importedRows Int          @default(0)
+  skippedRows  Int          @default(0)
+  errorRows    Int          @default(0)
+  createdById  Int?
+  createdAt    DateTime     @default(now())
+  completedAt  DateTime?
+
+  @@index([createdById, createdAt])
+  @@map("import_batches")
+}

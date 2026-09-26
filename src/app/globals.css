@@ -1,0 +1,100 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'IBM Plex Sans Arabic', ui-sans-serif, system-ui, 'Segoe UI', Tahoma, sans-serif;
+
+  /* اللون الأساسي: أخضر مزرق هادئ */
+  --color-brand-50: #effcf9;
+  --color-brand-100: #c9f5ec;
+  --color-brand-200: #95e9da;
+  --color-brand-300: #5ad4c3;
+  --color-brand-400: #2bb8a8;
+  --color-brand-500: #149c8e;
+  --color-brand-600: #0e7d73;
+  --color-brand-700: #10645d;
+  --color-brand-800: #12504b;
+  --color-brand-900: #13423f;
+  --color-brand-950: #042726;
+
+  --color-surface: #f5f7f8;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-surface text-slate-800 antialiased;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  /* الأرقام بعرض ثابت في الجداول والمبالغ */
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  bdi.ltr,
+  .ltr {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--color-brand-100);
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)];
+  }
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+}
+
+/* الطباعة: إخفاء عناصر لوحة التحكم وطباعة المحتوى فقط */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  body {
+    background: #fff !important;
+    font-size: 12px;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .card {
+    box-shadow: none !important;
+    border-color: #e2e8f0 !important;
+  }
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+}
+
+.print-only {
+  display: none;
+}
