@@ -8,7 +8,16 @@ import { useFormat } from '@/components/providers/app-provider'
 import { PERIOD_LABELS, type PeriodKey } from '@/lib/period'
 
 /** اختيار الفترة: قوالب جاهزة أو من/إلى. يكتب معاملات period/from/to في الرابط. */
-export function PeriodFilter({ current, children }: { current: { key: PeriodKey; from: string | null; to: string | null }; children?: React.ReactNode }) {
+export function PeriodFilter({
+  current,
+  children,
+  defaultKey = 'year',
+}: {
+  current: { key: PeriodKey; from: string | null; to: string | null }
+  children?: React.ReactNode
+  /** القالب الافتراضي للصفحة (يُحذف من الرابط عند اختياره) */
+  defaultKey?: PeriodKey
+}) {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -33,7 +42,7 @@ export function PeriodFilter({ current, children }: { current: { key: PeriodKey;
           onChange={(e) => {
             const key = e.target.value as PeriodKey
             if (key === 'custom') update({ period: null, from: current.from, to: current.to })
-            else update({ period: key === 'year' ? null : key, from: null, to: null })
+            else update({ period: key === defaultKey ? null : key, from: null, to: null })
           }}
         >
           {(Object.keys(PERIOD_LABELS) as PeriodKey[]).map((k) => (

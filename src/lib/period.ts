@@ -1,13 +1,15 @@
-import { addMonths, endOfMonth, isDateOnly, startOfMonth, type DateOnly } from './dates'
+import { addMonths, endOfMonth, endOfWeek, isDateOnly, startOfMonth, startOfWeek, type DateOnly } from './dates'
 
 /**
  * اختيار الفترة الموحد للصفحات والتقارير:
  * السنة الدراسية المختارة (افتراضي)، هذا الشهر، الشهر الماضي، كل الفترات، أو فترة مخصصة.
  */
-export type PeriodKey = 'year' | 'month' | 'last-month' | 'all' | 'custom'
+export type PeriodKey = 'year' | 'today' | 'week' | 'month' | 'last-month' | 'all' | 'custom'
 
 export const PERIOD_LABELS: Record<PeriodKey, string> = {
   year: 'السنة الدراسية المختارة',
+  today: 'اليوم',
+  week: 'هذا الأسبوع',
   month: 'هذا الشهر',
   'last-month': 'الشهر الماضي',
   all: 'كل الفترات',
@@ -22,7 +24,7 @@ export interface ResolvedPeriod {
 
 export function resolvePeriod(
   params: { period?: string; from?: string; to?: string },
-  ctx: { today: DateOnly; year: { startDate: DateOnly; endDate: DateOnly } | null },
+  ctx: { today: DateOnly; year: { startDate: DateOnly; endDate: DateOnly } | null; weekStartDay?: number },
   fallback: PeriodKey = 'year',
 ): ResolvedPeriod {
   const from = isDateOnly(params.from) ? params.from : null
@@ -32,6 +34,10 @@ export function resolvePeriod(
   switch (key) {
     case 'custom':
       return { key, from, to }
+    case 'today':
+      return { key, from: ctx.today, to: ctx.today }
+    case 'week':
+      return { key, from: startOfWeek(ctx.today, ctx.weekStartDay ?? 6), to: endOfWeek(ctx.today, ctx.weekStartDay ?? 6) }
     case 'month':
       return { key, from: startOfMonth(ctx.today), to: endOfMonth(ctx.today) }
     case 'last-month': {
