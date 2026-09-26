@@ -12,7 +12,9 @@ import { addSection, createAcademicYear, removeSection, saveGrade, saveStage, se
 import { saveCategoryAccount, saveChargeType, saveDiscountType } from '@/server/services/categories'
 import { ensureDir, storageRoot } from '@/server/storage'
 import { detectFileType } from '@/server/services/attachments'
-import { dateOnly, optionalAmount, optionalText, requiredText } from '@/lib/schemas/common'
+import { cancelReason, dateOnly, optionalAmount, optionalText, requiredText } from '@/lib/schemas/common'
+import { closeYear, reopenYear } from '@/server/services/year-closing'
+import { ADMIN_ROLE_KEY } from '@/lib/permissions'
 
 const EDITABLE: SettingsKey[] = ['school', 'finance', 'numbering', 'print', 'payroll', 'security', 'backup']
 
@@ -197,6 +199,35 @@ export async function saveCategoryAction(input: unknown): Promise<ActionResult<n
     const ctx = await actionContext(data.kind === 'EXPENSE' ? 'expenses.manage' : 'revenues.manage')
     await transaction((tx) => saveCategoryAccount(tx, ctx, data))
     return ok(null, 'تم حفظ التصنيف')
+  } catch (e) {
+    return toActionError(e)
+  }
+}
+
+// ---- إغلاق السنة وإعادة فتحها ----
+const closeYearSchema = z.object({ yearId: z.coerce.number().int().positive(), distribute: z.boolean(), makeNextCurrent: z.boolean() })
+
+export async function closeYearAction(input: unknown): Promise<ActionResult<null>> {
+  try {
+    const ctx = await actionContext('years.manage')
+    const data = closeYearSchema.parse(input)
+    const res = await transaction((tx) => closeYear(tx, ctx, data.yearId, { distribute: data.distribute, makeNextCurrent: data.makeNextCurrent }), { timeout: 120_000 })
+    return ok(null, `تم إغلاق السنة${res.closingEntry ? ` بقيد الإقفال ${res.closingEntry.number}` : ''}`)
+  } catch (e) {
+    return toActionError(e)
+  }
+}
+
+const reopenYearSchema = z.object({ yearId: z.coerce.number().int().positive(), reason: cancelReason })
+
+/** إعادة فتح سنة مغلقة: لمدير النظام فقط (docs/05-workflows.md §5.23). */
+export async function reopenYearAction(input: unknown): Promise<ActionResult<null>> {
+  try {
+    const ctx = await actionContext('years.manage')
+    if (ctx.user.roleKey !== ADMIN_ROLE_KEY) throw new BusinessError('إعادة فتح سنة مغلقة متاحة لمدير النظام فقط')
+    const data = reopenYearSchema.parse(input)
+    const res = await transaction((tx) => reopenYear(tx, ctx, data.yearId, data.reason), { timeout: 120_000 })
+    return ok(null, `تمت إعادة فتح السنة${res.reversed.length ? ` وعكس ${res.reversed.length} قيد إقفال` : ''}`)
   } catch (e) {
     return toActionError(e)
   }

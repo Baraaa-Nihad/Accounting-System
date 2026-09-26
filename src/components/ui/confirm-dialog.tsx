@@ -17,6 +17,7 @@ export function ConfirmDialog({
   requireReason,
   reasonLabel = 'السبب',
   pending,
+  disabled,
   onConfirm,
   children,
 }: {
@@ -29,6 +30,8 @@ export function ConfirmDialog({
   requireReason?: boolean
   reasonLabel?: string
   pending?: boolean
+  /** تعطيل زر التأكيد (مثل: حتى يكتب المستخدم اسم السنة) */
+  disabled?: boolean
   onConfirm: (reason: string) => void
   children?: React.ReactNode
 }) {
@@ -51,7 +54,7 @@ export function ConfirmDialog({
             <Button variant="secondary" onClick={() => onOpenChange(false)}>
               تراجع
             </Button>
-            <Button variant={danger ? 'danger' : 'primary'} disabled={invalid} loading={pending} onClick={() => onConfirm(reason.trim())}>
+            <Button variant={danger ? 'danger' : 'primary'} disabled={invalid || disabled} loading={pending} onClick={() => onConfirm(reason.trim())}>
               {confirmLabel}
             </Button>
           </>

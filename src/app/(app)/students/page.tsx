@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { UserPlus, FileSpreadsheet, ArrowUpRight, Users } from 'lucide-react'
+import { UserPlus, FileSpreadsheet, ArrowUpRight, Users, GraduationCap } from 'lucide-react'
 import { requirePermission, can } from '@/server/auth/guard'
 import { listStudents } from '@/server/services/students'
 import { listGradesWithSections } from '@/server/services/school'
@@ -61,6 +61,14 @@ export default async function StudentsPage({ searchParams }: PageProps<'/student
                 العائلات
               </Link>
             </Button>
+            {can(user, 'students.promote') ? (
+              <Button variant="secondary" asChild>
+                <Link href="/students/promote">
+                  <GraduationCap />
+                  ترحيل الطلاب
+                </Link>
+              </Button>
+            ) : null}
             {can(user, 'students.create') ? (
               <Button size="lg" asChild>
                 <Link href="/students/new">

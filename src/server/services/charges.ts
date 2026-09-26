@@ -810,7 +810,7 @@ export async function createBulkCharges(tx: Tx, ctx: Ctx, input: BulkChargeInput
 }
 
 /** تطبيق الرسوم المقررة لصف الطالب (عند إضافة طالب جديد). */
-export async function applyFeePlansToStudent(tx: Tx, ctx: Ctx, studentId: number, academicYearId: number) {
+export async function applyFeePlansToStudent(tx: Tx, ctx: Ctx, studentId: number, academicYearId: number, options?: { date?: DateOnly }) {
   const enrollment = await tx.enrollment.findUnique({ where: { studentId_academicYearId: { studentId, academicYearId } } })
   if (!enrollment) return { created: 0 }
   const plans = await tx.feePlan.findMany({
@@ -818,7 +818,7 @@ export async function applyFeePlansToStudent(tx: Tx, ctx: Ctx, studentId: number
     include: { chargeType: true },
   })
   const year = await tx.academicYear.findUniqueOrThrow({ where: { id: academicYearId } })
-  const today = await todayOf(tx)
+  const today = options?.date ?? (await todayOf(tx))
   let created = 0
   for (const plan of plans) {
     const exists = await tx.charge.findFirst({ where: { studentId, academicYearId, chargeTypeId: plan.chargeTypeId, status: 'ACTIVE' } })
