@@ -7,7 +7,7 @@ import { NextResponse, type NextRequest } from 'next/server'
  */
 
 const SESSION_COOKIE = 'sa_session'
-const PUBLIC_PATHS = ['/login', '/api/health', '/api/logo']
+const PUBLIC_PATHS = ['/login', '/api/health', '/api/logo', '/api/backups/run']
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -58,7 +58,8 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      source: '/((?!_next/static|_next/image|favicon.ico).*)',
+      // رفع النسخ الاحتياطية يتدفق مباشرة دون المرور بالـ proxy (قد يتجاوز حجمه حد التخزين المؤقت)؛ المسار يتحقق من الجلسة بنفسه
+      source: '/((?!_next/static|_next/image|favicon.ico|api/backups/upload).*)',
       missing: [
         { type: 'header', key: 'next-router-prefetch' },
         { type: 'header', key: 'purpose', value: 'prefetch' },

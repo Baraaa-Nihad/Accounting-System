@@ -55,3 +55,8 @@ export async function latestSuccessfulBackupDate(): Promise<Date | null> {
   const list = await listBackups()
   return list.length ? new Date(list[0].createdAt) : null
 }
+
+/** عمر النسخة بالأيام (null إن لم توجد نسخة). */
+export function backupAgeDays(meta: { createdAt: string } | undefined | null, now = Date.now()): number | null {
+  return meta ? (now - new Date(meta.createdAt).getTime()) / 86_400_000 : null
+}
