@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { fieldLabel } from '@/lib/field-labels'
 
 /**
  * خطأ عمل: رسالته عربية موجهة للمستخدم (مثل: «المبلغ أكبر من رصيد الصندوق»).
@@ -39,7 +40,9 @@ export function toActionError(error: unknown): { ok: false; error: string; field
       const key = issue.path.join('.')
       if (!fieldErrors[key]) fieldErrors[key] = issue.message
     }
-    return { ok: false, error: 'يرجى تصحيح الحقول المشار إليها', fieldErrors }
+    const first = error.issues[0]
+    const where = first?.path.length ? fieldLabel(String(first.path[first.path.length - 1])) : ''
+    return { ok: false, error: first ? `يرجى تصحيح الحقول المشار إليها (${where ? `${where}: ` : ''}${first.message})` : 'يرجى تصحيح الحقول المشار إليها', fieldErrors }
   }
   const message = error instanceof Error ? error.message : String(error)
   if (message.includes('JOURNAL_UNBALANCED')) {

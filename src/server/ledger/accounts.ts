@@ -98,3 +98,38 @@ export async function expenseCategories(client: DbOrTx, activeOnly = true) {
 export async function otherRevenueCategories(client: DbOrTx, activeOnly = true) {
   return leafAccountsUnder(client, 'OTHER_REVENUE_GROUP', { activeOnly })
 }
+
+/** حسابات الأطراف: لا تُستخدم مباشرة إلا من شاشاتها (لأن كل حركة عليها يجب أن ترتبط بطالب/مورد/مقاول/موظف). */
+export const PARTY_ACCOUNT_KEYS: SystemAccountKey[] = [
+  'AR_STUDENTS',
+  'AP_SUPPLIERS',
+  'AP_CONTRACTORS',
+  'SALARIES_PAYABLE',
+  'EMPLOYEE_ADVANCES',
+  'CHEQUES_UNDER_COLLECTION',
+]
+
+/** هل يمكن استخدام الحساب في قيد مباشر (بدون طرف)؟ يستبعد الصناديق وحسابات الأطراف وحسابات الشركاء. */
+export async function isFreePostingAccount(client: DbOrTx, accountId: number): Promise<boolean> {
+  const acc = await client.account.findUnique({ where: { id: accountId }, include: { cashAccount: true } })
+  if (!acc || acc.isGroup || !acc.isActive || acc.cashAccount) return false
+  if (acc.systemKey && (PARTY_ACCOUNT_KEYS as string[]).includes(acc.systemKey)) return false
+  const partner = await client.partner.findFirst({ where: { OR: [{ capitalAccountId: acc.id }, { drawingsAccountId: acc.id }] }, select: { id: true } })
+  return !partner
+}
+
+/** الحسابات المتاحة للقيد المباشر (سند صرف «على حساب»، قيود يدوية بدون طرف). */
+export async function freePostingAccounts(client: DbOrTx) {
+  const partners = await client.partner.findMany({ select: { capitalAccountId: true, drawingsAccountId: true } })
+  const partnerIds = partners.flatMap((p) => [p.capitalAccountId, p.drawingsAccountId]).filter((x): x is number => x !== null)
+  return client.account.findMany({
+    where: {
+      isGroup: false,
+      isActive: true,
+      cashAccount: null,
+      id: { notIn: partnerIds.length ? partnerIds : [-1] },
+      OR: [{ systemKey: null }, { systemKey: { notIn: PARTY_ACCOUNT_KEYS } }],
+    },
+    orderBy: { code: 'asc' },
+  })
+}

@@ -23,6 +23,8 @@ import { DiscountDialog } from '@/components/charges/discount-dialog'
 import { StudentStatusDialog } from '@/components/students/student-status-dialog'
 import { StudentChargesTable } from '@/components/students/student-charges-table'
 import { QuickPaymentDialog } from '@/components/receipts/quick-payment-dialog'
+import { StudentCreditBanner } from '@/components/students/credit-banner'
+import { openInstallments, studentCredit } from '@/server/services/receipts'
 import { AttachmentsPanel } from '@/components/attachments/attachments-panel'
 import { StatementFilters } from '@/components/students/statement-filters'
 import { INSTALLMENT_DISPLAY, PAYMENT_METHOD, STUDENT_STATUS, DOC_STATUS, GENDER, ENROLLMENT_STATUS } from '@/lib/labels'
@@ -87,7 +89,11 @@ export default async function StudentPage({ params, searchParams }: PageProps<'/
     defaultMethod: t.defaultMethod,
     defaultValue: t.defaultValue?.toString() ?? null,
   }))
-  const charges = await studentCharges(db, studentId, { includeCancelled: tab === 'charges' })
+  const [charges, credit, open] = await Promise.all([
+    studentCharges(db, studentId, { includeCancelled: tab === 'charges' }),
+    studentCredit(db, studentId),
+    openInstallments(db, [studentId]),
+  ])
   const balance = D(summary.balance)
 
   return (
@@ -202,6 +208,8 @@ export default async function StudentPage({ params, searchParams }: PageProps<'/
           ))}
         </div>
       </div>
+
+      {credit.greaterThan(0) ? <StudentCreditBanner studentId={student.id} credit={credit.toString()} hasOpen={open.length > 0} /> : null}
 
       <LinkTabs
         className="mb-5"

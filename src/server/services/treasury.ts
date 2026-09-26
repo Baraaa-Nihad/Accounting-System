@@ -265,3 +265,28 @@ export async function cashAccountsSummary(client: DbOrTx = db, range?: { from?: 
     }
   })
 }
+
+export async function listTransfers(
+  client: DbOrTx,
+  f: { from?: DateOnly; to?: DateOnly; accountId?: number; status?: string; page?: number; pageSize?: number },
+) {
+  const pageSize = Math.min(Math.max(f.pageSize ?? 25, 5), 1000)
+  const page = Math.max(f.page ?? 1, 1)
+  const and: Prisma.CashTransferWhereInput[] = []
+  if (f.from) and.push({ date: { gte: fromDateOnly(f.from) } })
+  if (f.to) and.push({ date: { lte: fromDateOnly(f.to) } })
+  if (f.accountId) and.push({ OR: [{ fromAccountId: f.accountId }, { toAccountId: f.accountId }] })
+  if (f.status === 'ACTIVE' || f.status === 'CANCELLED') and.push({ status: f.status })
+  const where = and.length ? { AND: and } : {}
+  const [rows, total] = await Promise.all([
+    client.cashTransfer.findMany({
+      where,
+      include: { fromAccount: { select: { name: true } }, toAccount: { select: { name: true } }, createdBy: { select: { fullName: true } } },
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    client.cashTransfer.count({ where }),
+  ])
+  return { rows, total, page, pageSize, pages: Math.max(1, Math.ceil(total / pageSize)) }
+}

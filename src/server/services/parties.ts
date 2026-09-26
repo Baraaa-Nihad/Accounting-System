@@ -160,19 +160,61 @@ export async function listSuppliers(client: DbOrTx, f: { q?: string; active?: bo
   }
   if (f.active !== undefined) conds.push(Prisma.sql`s."isActive" = ${f.active}`)
   const ap = await accountIdByKey(client, 'AP_SUPPLIERS')
+  // الفواتير والدفعات من المستندات الفعالة، والرصيد من الأستاذ العام
   const rows = await client.$queryRaw<{ id: number; name: string; category: string | null; phone: string | null; isActive: boolean; bills: string; paid: string; balance: string }[]>`
     SELECT s."id", s."name", s."category", s."phone", s."isActive",
-           COALESCE(SUM(jl."credit"), 0)::text AS bills, COALESCE(SUM(jl."debit"), 0)::text AS paid,
-           COALESCE(SUM(jl."credit" - jl."debit"), 0)::text AS balance
+      COALESCE((SELECT SUM(b."amount") FROM "supplier_bills" b WHERE b."supplierId" = s."id" AND b."status" = 'ACTIVE'), 0)::text AS bills,
+      COALESCE((SELECT SUM(v."amount") FROM "payment_vouchers" v WHERE v."supplierId" = s."id" AND v."kind" = 'SUPPLIER_PAYMENT' AND v."status" = 'ACTIVE'), 0)::text AS paid,
+      COALESCE((SELECT SUM(jl."credit" - jl."debit") FROM "journal_lines" jl WHERE jl."supplierId" = s."id" AND jl."accountId" = ${ap}), 0)::text AS balance
     FROM "suppliers" s
-    LEFT JOIN "journal_lines" jl ON jl."supplierId" = s."id" AND jl."accountId" = ${ap}
     WHERE ${Prisma.join(conds, ' AND ')}
-    GROUP BY s."id"
     ORDER BY s."isActive" DESC, s."name" ASC
     LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`
   const [c] = await client.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS count FROM "suppliers" s WHERE ${Prisma.join(conds, ' AND ')}`
   const total = Number(c.count)
+  return {
+    rows: rows.map((r) => ({ ...r, bills: D(r.bills).toString(), paid: D(r.paid).toString(), balance: D(r.balance).toString() })),
+    total,
+    page,
+    pageSize,
+    pages: Math.max(1, Math.ceil(total / pageSize)),
+  }
+}
+
+/** ملخص مورد: إجمالي الفواتير الفعالة، المدفوع، المستحق (من الأستاذ). */
+export async function supplierSummary(client: DbOrTx, supplierId: number) {
+  const [bills, paid, balance] = await Promise.all([
+    client.supplierBill.aggregate({ where: { supplierId, status: 'ACTIVE' }, _sum: { amount: true }, _count: true }),
+    client.paymentVoucher.aggregate({ where: { supplierId, kind: 'SUPPLIER_PAYMENT', status: 'ACTIVE' }, _sum: { amount: true } }),
+    supplierBalance(client, supplierId),
+  ])
+  return { bills: D(bills._sum.amount).toString(), billsCount: bills._count, paid: D(paid._sum.amount).toString(), balance: balance.toString() }
+}
+
+export async function listSupplierBills(client: DbOrTx, f: { supplierId?: number; status?: string; from?: DateOnly; to?: DateOnly; page?: number; pageSize?: number }) {
+  const pageSize = Math.min(Math.max(f.pageSize ?? 25, 5), 1000)
+  const page = Math.max(f.page ?? 1, 1)
+  const and: Prisma.SupplierBillWhereInput[] = []
+  if (f.supplierId) and.push({ supplierId: f.supplierId })
+  if (f.status === 'ACTIVE' || f.status === 'CANCELLED') and.push({ status: f.status })
+  if (f.from) and.push({ date: { gte: fromDateOnly(f.from) } })
+  if (f.to) and.push({ date: { lte: fromDateOnly(f.to) } })
+  const where = and.length ? { AND: and } : {}
+  const [rows, total] = await Promise.all([
+    client.supplierBill.findMany({
+      where,
+      include: { supplier: { select: { id: true, name: true } }, expenseAccount: { select: { name: true } } },
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    client.supplierBill.count({ where }),
+  ])
   return { rows, total, page, pageSize, pages: Math.max(1, Math.ceil(total / pageSize)) }
+}
+
+export async function getSupplierBill(client: DbOrTx, id: number) {
+  return client.supplierBill.findUnique({ where: { id }, include: { supplier: true, expenseAccount: true, academicYear: true } })
 }
 
 // ---------------------------------------------------------------------

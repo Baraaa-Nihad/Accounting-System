@@ -2,6 +2,9 @@ import { z } from 'zod'
 import { isDateOnly } from '../dates'
 import { parseAmountInput } from '../money'
 
+// رسائل التحقق الافتراضية بالعربية
+z.config(z.locales.ar())
+
 /** نص اختياري: الفراغ يتحول إلى null */
 export const optionalText = (max = 500) =>
   z
@@ -28,7 +31,8 @@ export const optionalDate = z
 
 export const id = z.coerce.number({ error: 'قيمة غير صالحة' }).int().positive('اختر قيمة')
 export const optionalId = z
-  .union([z.coerce.number().int().positive(), z.literal(''), z.null(), z.undefined()])
+  .union([z.coerce.number().int().positive(), z.literal(''), z.null()])
+  .optional()
   .transform((v) => (typeof v === 'number' ? v : null))
 
 /** مبلغ مالي: يقبل نصًا بأرقام عربية أو فواصل، ويعيد نصًا عشريًا نظيفًا */
@@ -53,7 +57,8 @@ export const amount = (options?: { allowZero?: boolean; message?: string }) =>
     })
 
 export const optionalAmount = z
-  .union([z.string(), z.number(), z.null(), z.undefined()])
+  .union([z.string(), z.number(), z.null()])
+  .optional()
   .transform((v, ctx) => {
     if (v === null || v === undefined || v === '') return null
     const d = parseAmountInput(v)

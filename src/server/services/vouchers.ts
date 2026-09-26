@@ -9,7 +9,7 @@ import { getSettings, today as todayOf } from '../settings'
 import { resolveOpenYear } from '../years'
 import { nextDocumentNumber } from '../numbering'
 import { postEntry, reverseEntry } from '../ledger/posting'
-import { accountIdByKey } from '../ledger/accounts'
+import { accountIdByKey, isFreePostingAccount } from '../ledger/accounts'
 import { assertSufficientBalance } from './treasury'
 import { recomputeJobPaid, supplierBalance } from './parties'
 import { recomputePayrollItemPaid } from './payroll'
@@ -164,8 +164,10 @@ async function resolvePosting(tx: Tx, ctx: Ctx, input: VoucherInput, amount: Dec
     }
     case 'OTHER': {
       if (!ctx.permissions.has('accounting.manage')) throw new PermissionError('الصرف على حساب محاسبي مباشر يتطلب صلاحية المحاسبة العامة')
-      const acc = await tx.account.findUnique({ where: { id: input.otherAccountId ?? -1 }, include: { cashAccount: true } })
-      if (!acc || acc.isGroup || !acc.isActive || acc.cashAccount) throw new BusinessError('اختر الحساب', { otherAccountId: 'اختر الحساب' })
+      const acc = await tx.account.findUnique({ where: { id: input.otherAccountId ?? -1 } })
+      if (!acc || !(await isFreePostingAccount(tx, acc.id))) {
+        throw new BusinessError('اختر حسابًا صالحًا. حسابات الطلاب والموردين والمقاولين والرواتب والصناديق تُستخدم من شاشاتها.', { otherAccountId: 'اختر الحساب' })
+      }
       if (!input.payeeName?.trim()) throw new BusinessError('اسم المستفيد مطلوب', { payeeName: 'مطلوب' })
       return { debitAccountId: acc.id, party: {}, payeeName: input.payeeName.trim(), label: acc.name, links: { expenseAccountId: acc.id } }
     }
@@ -372,6 +374,7 @@ export async function listVouchers(f: VoucherFilters, client: DbOrTx = db) {
       include: {
         cashAccount: { select: { name: true } },
         expenseAccount: { select: { name: true } },
+        contractorJob: { select: { description: true } },
         createdBy: { select: { fullName: true } },
         cheque: { select: { number: true, status: true } },
       },
