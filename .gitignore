@@ -47,3 +47,4 @@ next-env.d.ts
 # local storage (uploads, backups)
 /storage
 /test-results
+/deploy-check

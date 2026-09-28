@@ -1,0 +1,26 @@
+# إضافات التشغيل عبر deploy/server.sh فوق docker-compose.yml:
+# حدود للذاكرة والمعالج وتدوير للسجلات، حتى لا يؤثر النظام على أي تطبيق آخر على نفس الخادم.
+# القيم تُضبط تلقائيًا في config.env حسب موارد الخادم.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    mem_limit: ${DB_MEM_LIMIT:-512m}
+    cpus: ${DB_CPUS:-1}
+    shm_size: 128m
+    logging: *logging
+
+  migrate:
+    mem_limit: ${MIGRATE_MEM_LIMIT:-1g}
+    logging: *logging
+
+  app:
+    mem_limit: ${APP_MEM_LIMIT:-1536m}
+    cpus: ${APP_CPUS:-1}
+    shm_size: 256m
+    logging: *logging

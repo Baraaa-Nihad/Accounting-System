@@ -40,6 +40,16 @@ docker compose up -d --build
 - عند التحديث: `git pull && docker compose up -d --build` (تُطبّق الترحيلات الجديدة تلقائيًا).
 - ضع النظام خلف HTTPS (مثل Nginx أو Caddy) عند النشر على الإنترنت؛ ملفات تعريف الارتباط تصبح آمنة تلقائيًا مع HTTPS.
 
+## التثبيت بأمر واحد على خادم (حتى لو كان يشغّل تطبيقات أخرى)
+
+السكربت `deploy/server.sh` يفحص الخادم ويثبّت النظام معزولًا تمامًا. يستخدم مشروع Docker وقاعدة بيانات خاصين به، ويعمل على `127.0.0.1` مع حدود للموارد. يضيف ملف موقع مستقلًا في nginx أو Apache مع شهادة HTTPS، ولا يلمس أي تطبيق آخر. التفاصيل في [`deploy/README.md`](deploy/README.md).
+
+```bash
+curl -fsSL -o school.sh https://raw.githubusercontent.com/Baraaa-Nihad/Accounting-System/claude/accounting-system-web-l8z9mu/deploy/server.sh
+sudo bash school.sh check   --domain school.example.com
+sudo bash school.sh install --domain school.example.com
+```
+
 ## التشغيل بدون Docker (تطوير أو خادم مباشر)
 
 المتطلبات: Node.js 22، PostgreSQL 16 مع أدوات `pg_dump` و`pg_restore`، و(اختياريًا) Chromium لملفات PDF.
@@ -70,6 +80,7 @@ npm run build && npm run start
 | `STORAGE_DIR` | | مجلد المرفقات والنسخ الاحتياطية (الافتراضي `./storage`) |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | | المستخدم المدير الذي يُنشأ عند أول تهيئة فقط |
 | `CHROMIUM_PATH` | | مسار Chromium لتوليد PDF (بدونه تبقى الطباعة و«حفظ كـ PDF» من المتصفح متاحة) |
+| `APP_INTERNAL_URL` | | الرابط الداخلي الذي يفتح منه Chromium صفحات الطباعة لتوليد PDF (مضبوط في Docker على `http://127.0.0.1:3000`؛ الافتراضي رابط الطلب نفسه) |
 | `COOKIE_SECURE` | | `true` أو `false` لفرض/تعطيل ملفات تعريف الارتباط الآمنة (الافتراضي حسب HTTPS) |
 | `PG_BIN_DIR` | | مجلد `pg_dump`/`pg_restore` إن لم يكونا في `PATH` |
 | `BACKUP_CRON_TOKEN` | | رمز تشغيل النسخ من cron خارجي عبر `npm run backup` |

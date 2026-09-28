@@ -1,0 +1,141 @@
+# يختبر deploy/server.sh على خادم Ubuntu حقيقي يشغّل تطبيقًا آخر مسبقًا (موقع وحاويات وقاعدة بيانات):
+# بناء الصورة، التثبيت خلف nginx أو Apache أو Caddy أو بمنفذ مباشر، الدخول وتوليد PDF عبر خادم الويب،
+# التحديث مع بقاء البيانات، ثم الإزالة — والتأكد أن التطبيق الآخر وإعدادات خادم الويب لم تتغير.
+name: Server install
+
+on:
+  push:
+    branches: [claude/accounting-system-web-l8z9mu]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - docker-compose.yml
+      - deploy/**
+      - scripts/deploy-check.mjs
+      - package.json
+      - package-lock.json
+      - prisma/**
+      - .github/workflows/server-install.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    name: install (${{ matrix.web }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        web: [nginx, apache, caddy, port]
+    env:
+      WEB: ${{ matrix.web }}
+      INSTALLED: /opt/school-accounting/app/deploy/server.sh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare a server that already runs another app
+        run: |
+          set -euxo pipefail
+          # السكربت يعمل كـ root وينسخ الكود من نسخة المستودع هذه
+          sudo git config --system --add safe.directory '*'
+          git branch -f "$GITHUB_REF_NAME" HEAD 2>/dev/null || true
+          echo "127.0.0.1 school.test other.test" | sudo tee -a /etc/hosts
+          # حاويات «التطبيق الآخر» (الأولى تحجز المنفذ 3100 عمدًا)
+          docker run -d --name other-app --restart unless-stopped -p 127.0.0.1:3100:80 nginx:alpine
+          docker run -d --name other-db --restart unless-stopped -e POSTGRES_PASSWORD=other -p 127.0.0.1:5432:5432 postgres:16-alpine
+          case "$WEB" in
+            nginx)
+              command -v nginx || sudo apt-get install -y -q nginx
+              printf 'server {\n    listen 80;\n    server_name other.test;\n    location / { return 200 "other-site-ok"; }\n}\n' | sudo tee /etc/nginx/sites-available/other.conf
+              sudo ln -sf /etc/nginx/sites-available/other.conf /etc/nginx/sites-enabled/other.conf
+              sudo systemctl restart nginx ;;
+            apache)
+              command -v apache2ctl || sudo apt-get install -y -q apache2
+              sudo mkdir -p /var/www/other
+              echo other-site-ok | sudo tee /var/www/other/index.html
+              printf '<VirtualHost *:80>\n    ServerName other.test\n    DocumentRoot /var/www/other\n</VirtualHost>\n' | sudo tee /etc/apache2/sites-available/other.conf
+              sudo a2ensite -q other
+              sudo systemctl restart apache2 ;;
+          esac
+          cat > /tmp/fingerprint.sh <<'EOF'
+          # بصمة التطبيق الآخر: حاوياته وإعدادات خادم الويب (عدا ملفات النظام ووحدات Apache التي قد تُفعّل)
+          docker inspect -f '{{.Name}} {{.Id}} {{.State.StartedAt}} {{.State.Status}} {{.RestartCount}}' other-app other-db
+          for d in /etc/nginx /etc/apache2; do
+            [ -d "$d" ] || continue
+            sudo find "$d" -name 'school-accounting*' -prune -o -path '*/mods-enabled' -prune -o -type f -print0 | sort -z | xargs -0 -r sudo sha256sum
+            sudo find "$d" -name 'school-accounting*' -prune -o -path '*/mods-enabled' -prune -o -type l -printf '%p -> %l\n' | sort
+          done
+          EOF
+          bash /tmp/fingerprint.sh > /tmp/before.txt
+          case "$WEB" in
+            port) echo "ARGS=--port 8090" >> "$GITHUB_ENV"; echo "BASE=http://127.0.0.1:8090" >> "$GITHUB_ENV" ;;
+            *) echo "ARGS=--domain school.test --no-https" >> "$GITHUB_ENV"; echo "BASE=http://school.test" >> "$GITHUB_ENV" ;;
+          esac
+          mkdir -p /tmp/e2e && cp scripts/deploy-check.mjs /tmp/e2e/
+          version=$(node -p "require('./package-lock.json').packages['node_modules/playwright-core'].version")
+          (cd /tmp/e2e && npm init -y >/dev/null && npm install --silent --no-audit --no-fund "playwright-core@$version")
+
+      - name: Check (read-only)
+        run: sudo SCHOOL_REPO_URL="$GITHUB_WORKSPACE" SCHOOL_BRANCH="$GITHUB_REF_NAME" bash deploy/server.sh check $ARGS
+
+      - name: Install
+        run: sudo SCHOOL_REPO_URL="$GITHUB_WORKSPACE" SCHOOL_BRANCH="$GITHUB_REF_NAME" bash deploy/server.sh install $ARGS --yes
+
+      - name: Verify isolation and access through the web server
+        run: |
+          set -euxo pipefail
+          grep -q '"ok":true' <<<"$(curl -fsS "$BASE/api/health")"
+          curl -fsS -o /tmp/login.html "$BASE/login"
+          grep -q 'تسجيل الدخول' /tmp/login.html
+          if [ "$WEB" = nginx ] || [ "$WEB" = apache ]; then test "$(curl -fsS http://other.test/)" = other-site-ok; fi
+          # قاعدة بيانات النظام غير منشورة، والتطبيق على 127.0.0.1 فقط عند وجود نطاق
+          test -z "$(docker port school-accounting-db-1)"
+          app_ports=$(docker port school-accounting-app-1 3000)
+          if [ "$WEB" != port ]; then test "$(echo "$app_ports" | sort -u)" = "127.0.0.1:3101"; fi
+          # حدود الموارد وتدوير السجلات
+          test "$(docker inspect -f '{{.HostConfig.Memory}}' school-accounting-app-1)" -gt 0
+          test "$(docker inspect -f '{{.HostConfig.NanoCpus}}' school-accounting-app-1)" -gt 0
+          test "$(docker inspect -f '{{index .HostConfig.LogConfig.Config "max-size"}}' school-accounting-app-1)" = 10m
+          test "$(sudo stat -c '%a %U' /opt/school-accounting/config.env)" = '600 root'
+          P=$(sudo sed -n 's/^ADMIN_PASSWORD=//p' /opt/school-accounting/config.env)
+          echo "::add-mask::$P"
+          (cd /tmp/e2e && BASE_URL="$BASE" P="$P" NEW_P='Changed-Pass-2026' OUT_DIR="$GITHUB_WORKSPACE/deploy-check/install" node deploy-check.mjs)
+
+      - name: Update keeps the data
+        run: |
+          set -euxo pipefail
+          sudo bash "$INSTALLED" update --yes
+          (cd /tmp/e2e && BASE_URL="$BASE" P='Changed-Pass-2026' OUT_DIR="$GITHUB_WORKSPACE/deploy-check/update" node deploy-check.mjs)
+          sudo bash "$INSTALLED" status
+          sudo bash "$INSTALLED" info > /dev/null
+
+      - name: Uninstall leaves the other app untouched
+        run: |
+          set -euxo pipefail
+          sudo bash "$INSTALLED" uninstall --yes
+          bash /tmp/fingerprint.sh > /tmp/after.txt
+          diff /tmp/before.txt /tmp/after.txt
+          if [ "$WEB" = nginx ] || [ "$WEB" = apache ]; then test "$(curl -fsS http://other.test/)" = other-site-ok; fi
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=school-accounting)"
+          test -z "$(docker volume ls -q --filter label=com.docker.compose.project=school-accounting)"
+          test -z "$(docker network ls -q --filter label=com.docker.compose.project=school-accounting)"
+          test ! -e /opt/school-accounting
+          test ! -e /var/www/school-accounting-acme
+          test -z "$(ls -d /etc/nginx/*/school-accounting* /etc/apache2/*/school-accounting* 2>/dev/null || true)"
+
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-check-${{ matrix.web }}
+          path: deploy-check/
+          if-no-files-found: ignore

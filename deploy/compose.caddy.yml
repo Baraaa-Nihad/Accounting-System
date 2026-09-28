@@ -1,0 +1,27 @@
+# خادم ويب Caddy داخل مشروع النظام (يُستخدم فقط إذا كان المنفذان 80 و443 غير مستخدمين على الخادم):
+# يستخرج شهادة HTTPS ويجددها تلقائيًا ويمرر الطلبات إلى التطبيق عبر الشبكة الداخلية للمشروع.
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${CADDYFILE:?}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    mem_limit: 256m
+    cpus: ${DB_CPUS:-1}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  caddy_data:
+  caddy_config:
