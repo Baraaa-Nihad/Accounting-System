@@ -45,7 +45,8 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client-16 chromium fonts-noto-core \
  && apt-get purge -y curl gnupg && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
-RUN groupadd --system app && useradd --system --gid app --home /app app \
+# مجلد منزل قابل للكتابة: Chromium يكتب فيه إعداداته وملفات معالج الأعطال
+RUN groupadd --system app && useradd --system --gid app --home-dir /home/app --create-home app \
  && mkdir -p /data/storage && chown -R app:app /data
 COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static

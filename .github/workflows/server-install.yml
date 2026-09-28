@@ -132,6 +132,14 @@ jobs:
           test ! -e /var/www/school-accounting-acme
           test -z "$(ls -d /etc/nginx/*/school-accounting* /etc/apache2/*/school-accounting* 2>/dev/null || true)"
 
+      - name: Diagnostics
+        if: failure()
+        run: |
+          sudo bash "$INSTALLED" status || true
+          docker logs --tail 150 school-accounting-app-1 2>&1 || true
+          docker logs --tail 60 school-accounting-migrate-1 2>&1 || true
+          sudo tail -n 40 /var/log/nginx/error.log /var/log/apache2/error.log 2>/dev/null || true
+
       - name: Screenshots
         if: always()
         uses: actions/upload-artifact@v4
