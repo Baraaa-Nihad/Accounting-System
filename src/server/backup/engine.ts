@@ -176,7 +176,7 @@ export async function createBackup(kind: BackupKind, ctx: Ctx | null, note?: str
     const files = [
       { name: 'manifest.json', path: path.join(work, 'manifest.json') },
       { name: 'database.dump', path: dump },
-      ...(await Promise.all(FILE_DIRS.map(async (dir) => (await walk(path.join(storageRoot(), dir))).map((rel) => ({ name: `${dir}/${rel}`, path: path.join(storageRoot(), dir, rel) }))))).flat(),
+      ...(await Promise.all(FILE_DIRS.map(async (dir) => (await walk(path.join(/*turbopackIgnore: true*/ storageRoot(), dir))).map((rel) => ({ name: `${dir}/${rel}`, path: path.join(/*turbopackIgnore: true*/ storageRoot(), dir, rel) }))))).flat(),
     ]
 
     // التشفير المتدفق: رأس الملف ثم البيانات المشفرة ثم وسم التحقق
@@ -369,7 +369,7 @@ export async function restoreBackup(fileName: string, ctx: Ctx) {
     await run(pgBin('pg_restore'), ['--clean', '--if-exists', '--single-transaction', '--exit-on-error', '--no-owner', '--no-privileges', '--dbname', pgUrl(), path.join(dest, 'database.dump')])
     // الملفات: المجلد الحالي يُنقل جانبًا ثم يُستبدل بمحتوى النسخة (والقديم محفوظ في نسخة الأمان)
     for (const dir of FILE_DIRS) {
-      const live = path.join(storageRoot(), dir)
+      const live = path.join(/*turbopackIgnore: true*/ storageRoot(), dir)
       const restored = path.join(dest, dir)
       const aside = path.join(tmpDir(), `${dir}-before-restore-${stamp()}-${randomBytes(3).toString('hex')}`)
       await rename(live, aside).catch(() => undefined)

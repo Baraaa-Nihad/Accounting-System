@@ -21,7 +21,8 @@ RUN npm ci
 # ---------- البناء ----------
 FROM deps AS builder
 COPY . .
-RUN npx prisma generate && npm run build
+# مجلد public فارغ حاليًا فلا يتتبعه git؛ ننشئه لأن مرحلة التشغيل تنسخه
+RUN mkdir -p public && npx prisma generate && npm run build
 
 # ---------- الترحيل والبيانات الأساسية (خدمة تُشغَّل مرة عند كل تحديث) ----------
 FROM builder AS migrate
