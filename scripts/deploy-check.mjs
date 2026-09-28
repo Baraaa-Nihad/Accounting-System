@@ -12,8 +12,10 @@ mkdirSync(out, { recursive: true })
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/google-chrome' })
 const page = await browser.newPage({ viewport: { width: 1366, height: 860 }, locale: 'ar' })
 const errors = []
+// تنبيه المتصفح عن ترويسة COOP يظهر فقط عند الاختبار عبر HTTP على نطاق غير localhost (وليس خطأ في النظام)
+const expected = ['caret-color', 'Cross-Origin-Opener-Policy header has been ignored']
 page.on('pageerror', (e) => errors.push(e.message))
-page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('caret-color')) errors.push(m.text()) })
+page.on('console', (m) => { if (m.type() === 'error' && !expected.some((t) => m.text().includes(t))) errors.push(m.text()) })
 
 try {
   await page.goto(`${base}/login`)
