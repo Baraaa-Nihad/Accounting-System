@@ -128,6 +128,8 @@ export async function deletePartner(tx: Tx, ctx: Ctx, id: number) {
   if (await partnerHasMovements(tx, p)) {
     throw new BusinessError('للشريك حركات مالية مسجلة، فلا يُحذف حفاظًا على السجل المالي. يمكنك إيقافه بدلًا من ذلك.')
   }
+  const box = await tx.cashAccount.findFirst({ where: { partnerId: id }, select: { name: true } })
+  if (box) throw new BusinessError(`الشريك مرتبط بالصندوق «${box.name}». غيّر عهدة الصندوق أولًا.`)
   await tx.partner.delete({ where: { id } })
   const accounts = [p.capitalAccountId, p.drawingsAccountId].filter((x): x is number => x !== null)
   if (accounts.length) await tx.account.deleteMany({ where: { id: { in: accounts } } })

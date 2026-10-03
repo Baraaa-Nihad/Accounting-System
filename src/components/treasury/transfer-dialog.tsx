@@ -18,15 +18,29 @@ export interface TransferAccount {
   balance: string
 }
 
-/** تحويل مبلغ بين الصناديق والبنوك (إيداع نقدية في البنك، سحب من البنك...). */
-export function TransferDialog({ accounts, defaultFromId, trigger }: { accounts: TransferAccount[]; defaultFromId?: number; trigger?: React.ReactNode }) {
+/**
+ * تحويل مبلغ بين الصناديق والبنوك (إيداع نقدية في البنك، سحب من البنك...).
+ * fromIds: الحسابات المسموح التحويل منها (لصاحب العهدة: صناديقه فقط)، والتحويل إليها مفتوح.
+ */
+export function TransferDialog({
+  accounts,
+  defaultFromId,
+  fromIds,
+  trigger,
+}: {
+  accounts: TransferAccount[]
+  defaultFromId?: number
+  fromIds?: number[]
+  trigger?: React.ReactNode
+}) {
   const { today } = useApp()
   const f = useFormat()
   const [open, setOpen] = React.useState(false)
+  const sources = fromIds ? accounts.filter((a) => fromIds.includes(a.id)) : accounts
   const initial = () => {
     // الافتراضي: الحساب المحدد، وإلا صاحب أكبر رصيد
-    const richest = [...accounts].sort((a, b) => Number(b.balance) - Number(a.balance))[0]
-    const from = defaultFromId ?? richest?.id
+    const richest = [...sources].sort((a, b) => Number(b.balance) - Number(a.balance))[0]
+    const from = defaultFromId && sources.some((a) => a.id === defaultFromId) ? defaultFromId : richest?.id
     return {
       fromAccountId: String(from ?? ''),
       toAccountId: String(accounts.find((a) => a.id !== from)?.id ?? ''),
@@ -68,7 +82,7 @@ export function TransferDialog({ accounts, defaultFromId, trigger }: { accounts:
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="من" required error={fieldErrors.fromAccountId} hint={from ? <>الرصيد المتاح: {f.money(from.balance)}</> : undefined}>
             <Select value={v.fromAccountId} onChange={(e) => setV((p) => ({ ...p, fromAccountId: e.target.value }))}>
-              {accounts.map((a) => (
+              {sources.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>

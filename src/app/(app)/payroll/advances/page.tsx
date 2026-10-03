@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requirePermission, can } from '@/server/auth/guard'
 import { db } from '@/server/db'
 import { listAdvances } from '@/server/services/advances'
-import { cashAccountsSummary } from '@/server/services/treasury'
+import { boxOptionsFor } from '@/server/services/treasury'
 import { getFormatConfig } from '@/server/settings'
 import { makeFormatters } from '@/lib/format-jsx'
 import { ADVANCE_STATUS } from '@/lib/labels'
@@ -29,7 +29,7 @@ export default async function AdvancesPage({ searchParams }: PageProps<'/payroll
     getFormatConfig(),
     listAdvances(db, { employeeId: intParam(sp.employee), status: firstParam(sp.status) ?? 'ACTIVE', page: intParam(sp.page) }),
     db.employee.findMany({ where: { status: 'ACTIVE' }, orderBy: { fullName: 'asc' }, select: { id: true, fullName: true } }),
-    manage ? cashAccountsSummary(db) : Promise.resolve([]),
+    manage ? boxOptionsFor(db, user.id, user.permissions) : Promise.resolve([]),
   ])
   const f = makeFormatters(fmt)
   return (
@@ -41,7 +41,7 @@ export default async function AdvancesPage({ searchParams }: PageProps<'/payroll
           manage && can(user, 'vouchers.create') ? (
             <AdvanceDialog
               employees={employees}
-              cashAccounts={cash.filter((c) => c.isActive).map((c) => ({ id: c.id, name: c.name, type: c.type, balance: c.balance, isDefault: c.isDefault }))}
+              cashAccounts={cash}
             />
           ) : null
         }

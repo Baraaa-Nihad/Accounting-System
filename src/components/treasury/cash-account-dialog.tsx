@@ -4,7 +4,7 @@ import * as React from 'react'
 import { Pencil, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
-import { Checkbox, Input, Textarea } from '@/components/ui/input'
+import { Checkbox, Input, Select, Textarea } from '@/components/ui/input'
 import { Field } from '@/components/ui/field'
 import { MoneyInput } from '@/components/forms/money-input'
 import { useApp } from '@/components/providers/app-provider'
@@ -22,9 +22,23 @@ export interface CashAccountFormValue {
   isDefault: boolean
   isActive: boolean
   notes: string
+  /** صاحب العهدة: '' أو 'u:رقم المستخدم' أو 'p:رقم الشريك' */
+  custody: string
 }
 
-export function CashAccountDialog({ initial }: { initial?: CashAccountFormValue }) {
+export interface CustodyPeople {
+  users: { id: number; label: string }[]
+  partners: { id: number; label: string }[]
+}
+
+/** يحول قيمة اختيار العهدة إلى المعرّفين المرسلين للخادم. */
+function custodyIds(custody: string) {
+  const [kind, raw] = custody.split(':')
+  const id = Number(raw)
+  return { custodianId: kind === 'u' && id ? id : null, partnerId: kind === 'p' && id ? id : null }
+}
+
+export function CashAccountDialog({ initial, people }: { initial?: CashAccountFormValue; people: CustodyPeople }) {
   const { today } = useApp()
   const [open, setOpen] = React.useState(false)
   const empty = {
@@ -37,6 +51,7 @@ export function CashAccountDialog({ initial }: { initial?: CashAccountFormValue 
     isDefault: false,
     isActive: true,
     notes: '',
+    custody: '',
     openingBalance: '',
     openingDate: today,
   }
@@ -56,6 +71,7 @@ export function CashAccountDialog({ initial }: { initial?: CashAccountFormValue 
       lowBalanceAlert: v.lowBalanceAlert || null,
       isDefault: v.isDefault,
       notes: v.notes,
+      ...custodyIds(v.type === 'CASHBOX' ? v.custody : ''),
     }
     if (initial) update.run({ id: initial.id, ...common, isActive: v.isActive })
     else create.run({ ...common, type: v.type, openingBalance: v.openingBalance || null, openingDate: v.openingDate })
@@ -111,6 +127,36 @@ export function CashAccountDialog({ initial }: { initial?: CashAccountFormValue 
           <Field label="الاسم" required error={errors.name} className="sm:col-span-2">
             <Input value={v.name} onChange={set('name')} placeholder={v.type === 'CASHBOX' ? 'مثال: صندوق الإدارة' : 'مثال: بنك فلسطين — الحساب الجاري'} />
           </Field>
+          {v.type === 'CASHBOX' ? (
+            <Field
+              label="في عهدة"
+              error={errors.custodianId ?? errors.partnerId}
+              hint="صاحب العهدة يقبض ويصرف من صندوقه فقط، إلا من لديه صلاحية «القبض والصرف من كل الصناديق»"
+              className="sm:col-span-2"
+            >
+              <Select value={v.custody} onChange={set('custody')}>
+                <option value="">بلا عهدة (صندوق عام)</option>
+                {people.users.length ? (
+                  <optgroup label="الموظفون (المستخدمون)">
+                    {people.users.map((u) => (
+                      <option key={u.id} value={`u:${u.id}`}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {people.partners.length ? (
+                  <optgroup label="الشركاء">
+                    {people.partners.map((p) => (
+                      <option key={p.id} value={`p:${p.id}`}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+              </Select>
+            </Field>
+          ) : null}
           {v.type === 'BANK' ? (
             <>
               <Field label="اسم البنك">

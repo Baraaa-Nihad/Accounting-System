@@ -7,6 +7,7 @@ import { accountsTotals } from '../ledger/balances'
 import { D } from '@/lib/money'
 import { formatAmount } from '@/lib/format'
 import { latestSuccessfulBackupDate } from '../backup/catalog'
+import { boxAccess } from './treasury'
 
 /**
  * مركز التنبيهات: كل التنبيهات تُحسب لحظيًا من البيانات (لا تُخزن)، لذلك هي دقيقة دائمًا.
@@ -115,7 +116,11 @@ export async function getAlerts(user: CurrentUser): Promise<Alert[]> {
   }
 
   if (can('treasury.view')) {
-    const accounts = await db.cashAccount.findMany({ where: { isActive: true } })
+    // صاحب العهدة المقيّد يُنبَّه على صناديقه والحسابات البنكية فقط
+    const access = await boxAccess(db, user.id, user.permissions)
+    const accounts = (await db.cashAccount.findMany({ where: { isActive: true } })).filter(
+      (a) => !access.restricted || a.type === 'BANK' || access.own.includes(a.id),
+    )
     const totals = await accountsTotals(db, accounts.map((a) => a.glAccountId))
     for (const a of accounts) {
       const threshold = a.lowBalanceAlert !== null ? D(a.lowBalanceAlert) : a.type === 'CASHBOX' ? D(settings.finance.lowCashThreshold) : null

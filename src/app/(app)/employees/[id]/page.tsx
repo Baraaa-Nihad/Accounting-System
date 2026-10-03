@@ -7,7 +7,7 @@ import { derivedRates, employeeSummary } from '@/server/services/employees'
 import { listOvertime } from '@/server/services/payroll'
 import { listAdvances } from '@/server/services/advances'
 import { listVouchers } from '@/server/services/vouchers'
-import { cashAccountsSummary } from '@/server/services/treasury'
+import { boxOptionsFor } from '@/server/services/treasury'
 import { statementTarget } from '@/server/ledger/party-statements'
 import { getFormatConfig, getSettings } from '@/server/settings'
 import { makeFormatters, type Formatters } from '@/lib/format-jsx'
@@ -58,7 +58,7 @@ export default async function EmployeePage({ params, searchParams }: PageProps<'
   const f = makeFormatters(fmt)
   const summary = salaries ? await employeeSummary(db, emp.id) : null
   const hourly = emp.overtimeRate ? D(emp.overtimeRate) : derivedRates(emp.salaryType, emp.baseSalary, settings.payroll).hourly
-  const cash = salaries && can(user, 'advances.manage') ? (await cashAccountsSummary(db)).filter((c) => c.isActive) : []
+  const cash = salaries && can(user, 'advances.manage') ? await boxOptionsFor(db, user.id, user.permissions) : []
   const active = emp.status === 'ACTIVE'
 
   return (
@@ -99,7 +99,7 @@ export default async function EmployeePage({ params, searchParams }: PageProps<'
               <AdvanceDialog
                 employees={[{ id: emp.id, fullName: emp.fullName }]}
                 fixedEmployeeId={emp.id}
-                cashAccounts={cash.map((c) => ({ id: c.id, name: c.name, type: c.type, balance: c.balance, isDefault: c.isDefault }))}
+                cashAccounts={cash}
               />
             ) : null}
             {can(user, 'employees.manage') ? (

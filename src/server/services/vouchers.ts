@@ -10,7 +10,7 @@ import { resolveOpenYear } from '../years'
 import { nextDocumentNumber } from '../numbering'
 import { postEntry, reverseEntry } from '../ledger/posting'
 import { accountIdByKey, isFreePostingAccount } from '../ledger/accounts'
-import { assertSufficientBalance } from './treasury'
+import { assertBoxAllowed, assertSufficientBalance } from './treasury'
 import { recomputeJobPaid, supplierBalance } from './parties'
 import { recomputePayrollItemPaid, releaseAdvanceFromDrafts } from './payroll'
 import { D, round, sum, toDb } from '@/lib/money'
@@ -215,6 +215,7 @@ export async function createVoucher(tx: Tx, ctx: Ctx, input: VoucherInput) {
   if (!amount.greaterThan(0)) throw new BusinessError('المبلغ يجب أن يكون أكبر من صفر', { amount: 'أكبر من صفر' })
   const year = await resolveOpenYear(tx, input.date)
   const posting = await resolvePosting(tx, ctx, input, amount, decimals)
+  await assertBoxAllowed(tx, ctx, input.cashAccountId)
   const cash = await assertSufficientBalance(tx, input.cashAccountId, amount)
   if (input.paymentMethod === 'CHEQUE') {
     if (cash.type !== 'BANK') throw new BusinessError('الشيك يُصرف من حساب بنكي', { cashAccountId: 'اختر حسابًا بنكيًا' })

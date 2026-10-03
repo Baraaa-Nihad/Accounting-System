@@ -52,6 +52,7 @@ export const PERMISSIONS = {
   'treasury.view': 'عرض الصندوق والبنوك',
   'treasury.transfer': 'التحويل بين الصناديق والبنوك',
   'treasury.manage': 'إدارة الصناديق والحسابات البنكية',
+  'treasury.all_boxes': 'القبض والصرف من كل الصناديق (لا من صندوق عهدته فقط)',
 
   'reports.view': 'الاطلاع على التقارير',
   'reports.financial': 'التقارير المالية (الأرباح والخسائر)',
@@ -112,7 +113,7 @@ export const PERMISSION_GROUPS: { label: string; permissions: Permission[] }[] =
     ],
   },
   { label: 'المقاولون والموردون', permissions: ['contractors.view', 'contractors.manage', 'suppliers.view', 'suppliers.manage'] },
-  { label: 'الصندوق والبنوك', permissions: ['treasury.view', 'treasury.transfer', 'treasury.manage'] },
+  { label: 'الصندوق والبنوك', permissions: ['treasury.view', 'treasury.transfer', 'treasury.manage', 'treasury.all_boxes'] },
   { label: 'التقارير', permissions: ['reports.view', 'reports.financial', 'reports.export', 'import.excel'] },
   { label: 'المحاسبة العامة', permissions: ['accounting.view', 'accounting.manage'] },
   {

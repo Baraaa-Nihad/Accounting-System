@@ -13,11 +13,77 @@ import { accountIdByKey, createChildAccount } from '../ledger/accounts'
 import { accountTotals } from '../ledger/balances'
 import { D, round, toDb } from '@/lib/money'
 import { fromDateOnly, type DateOnly } from '@/lib/dates'
+import type { Permission } from '@/lib/permissions'
 import type Decimal from 'decimal.js'
 
 /**
  * الصندوق والبنوك (docs/05-workflows.md §5.20)
  */
+
+// ---------------------------------------------------------------------
+// عهدة الصناديق: صندوق نقدي في عهدة موظف (مستخدم) أو شريك.
+// من في عهدته صندوق ولا يملك «treasury.all_boxes» يقبض ويصرف ويحوّل من صناديقه فقط؛
+// الحسابات البنكية لا عهدة عليها وتبقى متاحة للجميع. من لا عهدة له يعمل كما كان.
+// ---------------------------------------------------------------------
+
+/** صناديق المستخدم (الفعالة والمعطلة) وهل هو مقيّد بها. */
+export async function boxAccess(client: DbOrTx, userId: number | null, permissions: Set<Permission>) {
+  const own = userId
+    ? (await client.cashAccount.findMany({ where: { type: 'CASHBOX', OR: [{ custodianId: userId }, { partner: { userId } }] }, select: { id: true }, orderBy: { name: 'asc' } })).map((r) => r.id)
+    : []
+  return { own, restricted: own.length > 0 && !permissions.has('treasury.all_boxes') }
+}
+
+/** يمنع المقيّد بعهدته من استخدام صندوق نقدي ليس في عهدته. */
+export async function assertBoxAllowed(tx: Tx, ctx: Ctx, cashAccountId: number, field = 'cashAccountId') {
+  const { own, restricted } = await boxAccess(tx, ctx.userId, ctx.permissions)
+  if (!restricted || own.includes(cashAccountId)) return
+  const ca = await tx.cashAccount.findUnique({ where: { id: cashAccountId }, select: { name: true, type: true } })
+  if (!ca || ca.type === 'BANK') return
+  throw new BusinessError(`«${ca.name}» ليس في عهدتك؛ سجّل على صندوقك أو على حساب بنكي.`, { [field]: 'ليس في عهدتك' })
+}
+
+export interface BoxOption {
+  id: number
+  name: string
+  type: CashAccountType
+  balance: string
+  /** المقترح لهذا المستخدم في السندات: صندوق عهدته أولًا، ثم الصندوق الافتراضي */
+  isDefault: boolean
+}
+
+/** الصناديق والحسابات التي يستخدمها المستخدم في السندات مع أرصدتها. */
+export async function boxOptionsFor(client: DbOrTx, userId: number | null, permissions: Set<Permission>): Promise<BoxOption[]> {
+  const [summary, access] = await Promise.all([cashAccountsSummary(client), boxAccess(client, userId, permissions)])
+  const active = summary.filter((a) => a.isActive)
+  const list = access.restricted ? active.filter((a) => a.type === 'BANK' || access.own.includes(a.id)) : active
+  const preferred =
+    list.find((a) => access.own.includes(a.id)) ?? list.find((a) => a.isDefault && a.type === 'CASHBOX') ?? list.find((a) => a.isDefault) ?? list[0]
+  return list.map((a) => ({ id: a.id, name: a.name, type: a.type, balance: a.balance, isDefault: a.id === preferred?.id }))
+}
+
+/** يتحقق من صاحب العهدة: للصناديق النقدية فقط، ولشخص واحد (موظف أو شريك). */
+async function custodyData(tx: Tx, type: CashAccountType, input: { custodianId?: number | null; partnerId?: number | null }) {
+  const custodianId = input.custodianId ?? null
+  const partnerId = input.partnerId ?? null
+  if (custodianId && partnerId) throw new BusinessError('الصندوق في عهدة شخص واحد: موظف أو شريك', { custodianId: 'اختر واحدًا فقط' })
+  if ((custodianId || partnerId) && type !== 'CASHBOX') throw new BusinessError('العهدة للصناديق النقدية فقط، لا للحسابات البنكية', { custodianId: 'للصناديق فقط' })
+  if (custodianId) {
+    const u = await tx.user.findUnique({ where: { id: custodianId }, select: { isActive: true } })
+    if (!u?.isActive) throw new BusinessError('الموظف المختار غير موجود أو غير فعال', { custodianId: 'غير متاح' })
+  }
+  if (partnerId) {
+    const p = await tx.partner.findUnique({ where: { id: partnerId }, select: { isActive: true } })
+    if (!p?.isActive) throw new BusinessError('الشريك المختار غير موجود أو غير فعال', { partnerId: 'غير متاح' })
+  }
+  return { custodianId, partnerId }
+}
+
+async function custodyLabel(tx: Tx, data: { custodianId: number | null; partnerId: number | null }) {
+  if (data.custodianId) return `في عهدة ${(await tx.user.findUniqueOrThrow({ where: { id: data.custodianId } })).fullName}`
+  if (data.partnerId) return `صندوق الشريك ${(await tx.partner.findUniqueOrThrow({ where: { id: data.partnerId } })).name}`
+  return null
+}
 
 export async function createCashAccount(
   tx: Tx,
@@ -33,11 +99,14 @@ export async function createCashAccount(
     lowBalanceAlert?: string | null
     isDefault?: boolean
     notes?: string | null
+    custodianId?: number | null
+    partnerId?: number | null
   },
 ) {
   const name = input.name.trim()
   if (name.length < 2) throw new BusinessError('اسم الحساب مطلوب')
   if (await tx.cashAccount.findUnique({ where: { name } })) throw new BusinessError('يوجد صندوق/حساب بنفس الاسم')
+  const custody = await custodyData(tx, input.type, input)
   const gl = await createChildAccount(tx, input.type === 'CASHBOX' ? 'CASH_GROUP' : 'BANK_GROUP', name)
   if (input.isDefault) await tx.cashAccount.updateMany({ where: { type: input.type }, data: { isDefault: false } })
   const account = await tx.cashAccount.create({
@@ -51,6 +120,7 @@ export async function createCashAccount(
       lowBalanceAlert: input.lowBalanceAlert ? toDb(input.lowBalanceAlert) : null,
       isDefault: !!input.isDefault,
       notes: input.notes ?? null,
+      ...custody,
     },
   })
   const opening = D(input.openingBalance)
@@ -67,12 +137,13 @@ export async function createCashAccount(
       ],
     })
   }
+  const custodyText = await custodyLabel(tx, custody)
   await audit(tx, ctx, {
     action: 'create',
     entityType: 'CashAccount',
     entityId: account.id,
     entityLabel: name,
-    summary: `إضافة ${input.type === 'CASHBOX' ? 'صندوق' : 'حساب بنكي'}: ${name}${opening.greaterThan(0) ? ` برصيد افتتاحي ${opening.toString()}` : ''}`,
+    summary: `إضافة ${input.type === 'CASHBOX' ? 'صندوق' : 'حساب بنكي'}: ${name}${custodyText ? ` (${custodyText})` : ''}${opening.greaterThan(0) ? ` برصيد افتتاحي ${opening.toString()}` : ''}`,
     after: account,
   })
   return account
@@ -82,7 +153,18 @@ export async function updateCashAccount(
   tx: Tx,
   ctx: Ctx,
   id: number,
-  input: { name: string; bankName?: string | null; accountNumber?: string | null; iban?: string | null; lowBalanceAlert?: string | null; isDefault?: boolean; isActive: boolean; notes?: string | null },
+  input: {
+    name: string
+    bankName?: string | null
+    accountNumber?: string | null
+    iban?: string | null
+    lowBalanceAlert?: string | null
+    isDefault?: boolean
+    isActive: boolean
+    notes?: string | null
+    custodianId?: number | null
+    partnerId?: number | null
+  },
 ) {
   const before = await tx.cashAccount.findUnique({ where: { id } })
   if (!before) throw new BusinessError('الحساب غير موجود')
@@ -90,6 +172,7 @@ export async function updateCashAccount(
     const balance = (await accountTotals(tx, before.glAccountId)).net
     if (!balance.isZero()) throw new BusinessError(`لا يمكن تعطيل حساب رصيده ${balance.toString()}. حوّل رصيده أولًا.`)
   }
+  const custody = await custodyData(tx, before.type, input)
   if (input.isDefault) await tx.cashAccount.updateMany({ where: { type: before.type, id: { not: id } }, data: { isDefault: false } })
   const after = await tx.cashAccount.update({
     where: { id },
@@ -102,10 +185,21 @@ export async function updateCashAccount(
       isDefault: !!input.isDefault,
       isActive: input.isActive,
       notes: input.notes ?? null,
+      ...custody,
     },
   })
   if (after.name !== before.name) await tx.account.update({ where: { id: before.glAccountId }, data: { name: after.name } })
-  await audit(tx, ctx, { action: 'update', entityType: 'CashAccount', entityId: id, entityLabel: after.name, before, after })
+  const custodyChanged = before.custodianId !== after.custodianId || before.partnerId !== after.partnerId
+  const custodyText = custodyChanged ? (await custodyLabel(tx, custody)) ?? 'بلا عهدة' : null
+  await audit(tx, ctx, {
+    action: 'update',
+    entityType: 'CashAccount',
+    entityId: id,
+    entityLabel: after.name,
+    ...(custodyText ? { summary: `تعديل ${after.name} — العهدة: ${custodyText}` } : {}),
+    before,
+    after,
+  })
   return after
 }
 
@@ -138,6 +232,8 @@ export async function createTransfer(
   if (!amount.greaterThan(0)) throw new BusinessError('المبلغ يجب أن يكون أكبر من صفر', { amount: 'أكبر من صفر' })
   if (input.fromAccountId === input.toAccountId) throw new BusinessError('لا يمكن التحويل إلى نفس الحساب', { toAccountId: 'اختر حسابًا مختلفًا' })
   const year = await resolveOpenYear(tx, input.date)
+  // المقيّد بعهدته يحوّل من صناديقه فقط (تسليم النقدية)، وإلى أي صندوق أو بنك
+  await assertBoxAllowed(tx, ctx, input.fromAccountId, 'fromAccountId')
   const from = await assertSufficientBalance(tx, input.fromAccountId, amount)
   const to = await tx.cashAccount.findUnique({ where: { id: input.toAccountId } })
   if (!to || !to.isActive) throw new BusinessError('الحساب المحوَّل إليه غير متاح')
@@ -205,6 +301,10 @@ export interface CashAccountSummary {
   lowBalanceAlert: string | null
   glAccountId: number
   glCode: string
+  custodianId: number | null
+  custodianName: string | null
+  partnerId: number | null
+  partnerName: string | null
   opening: string
   receipts: string
   payments: string
@@ -215,7 +315,10 @@ export interface CashAccountSummary {
 
 /** ملخص كل صندوق/بنك: الافتتاحي، المقبوضات، المدفوعات، التحويلات، الرصيد الحالي (لفترة اختيارية). */
 export async function cashAccountsSummary(client: DbOrTx = db, range?: { from?: DateOnly; to?: DateOnly }): Promise<CashAccountSummary[]> {
-  const accounts = await client.cashAccount.findMany({ orderBy: [{ isActive: 'desc' }, { type: 'asc' }, { name: 'asc' }], include: { glAccount: true } })
+  const accounts = await client.cashAccount.findMany({
+    orderBy: [{ isActive: 'desc' }, { type: 'asc' }, { name: 'asc' }],
+    include: { glAccount: true, custodian: { select: { fullName: true } }, partner: { select: { name: true } } },
+  })
   if (accounts.length === 0) return []
   const ids = accounts.map((a) => a.glAccountId)
   const conds: Prisma.Sql[] = [Prisma.sql`jl."accountId" IN (${Prisma.join(ids)})`]
@@ -256,6 +359,10 @@ export async function cashAccountsSummary(client: DbOrTx = db, range?: { from?: 
       lowBalanceAlert: a.lowBalanceAlert?.toString() ?? null,
       glAccountId: a.glAccountId,
       glCode: a.glAccount.code,
+      custodianId: a.custodianId,
+      custodianName: a.custodian?.fullName ?? null,
+      partnerId: a.partnerId,
+      partnerName: a.partner?.name ?? null,
       opening: D(r?.opening).toString(),
       receipts: D(r?.receipts).toString(),
       payments: D(r?.payments).toString(),

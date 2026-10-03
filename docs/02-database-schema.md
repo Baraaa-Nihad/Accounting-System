@@ -96,7 +96,7 @@ erDiagram
 
 | الجدول | الوصف | أهم الحقول |
 |--------|-------|-----------|
-| `cash_accounts` | الصناديق والحسابات البنكية | `name`، `type` (CASHBOX/BANK)، `bankName`، `accountNumber`، `iban`، `glAccountId`، `lowBalanceAlert`، `isDefault` |
+| `cash_accounts` | الصناديق والحسابات البنكية | `name`، `type` (CASHBOX/BANK)، `bankName`، `accountNumber`، `iban`، `glAccountId`، `lowBalanceAlert`، `isDefault`، `custodianId` (الموظف صاحب العهدة) أو `partnerId` (صندوق الشريك) — للصناديق النقدية فقط وبقيد في القاعدة |
 | `receipts` | **سندات القبض** | `number` (فريد)، `kind` (STUDENT/FAMILY/OTHER_REVENUE/PARTNER_CAPITAL/OPENING_CREDIT)، `date`، `payerName`، `studentId`، `guardianId`، `amount`، `paymentMethod`، `cashAccountId`، `revenueAccountId`، `description`، `status`، `journalEntryId` |
 | `payment_allocations` | توزيع مبلغ السند | `receiptId`، `studentId`، `chargeId`، `installmentId`، `refundVoucherId`، `amount` — **مجموع توزيعات السند = مبلغه دائمًا**؛ التوزيع بدون قسط = رصيد دائن للطالب |
 | `cheques` | الشيكات الواردة والصادرة | `direction`، `number`، `bankName`، `dueDate`، `amount`، `status` (IN_PORTFOLIO/CLEARED/BOUNCED/ISSUED/CANCELLED)، `receiptId`، `voucherId` |

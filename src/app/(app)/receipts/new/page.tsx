@@ -1,6 +1,7 @@
 import { requirePermission } from '@/server/auth/guard'
 import { db } from '@/server/db'
 import { otherRevenueCategories } from '@/server/ledger/accounts'
+import { boxOptionsFor } from '@/server/services/treasury'
 import { PageHeader } from '@/components/ui/page-header'
 import { NewReceiptPanel } from '@/components/receipts/new-receipt-panel'
 import { firstParam, intParam } from '@/lib/utils'
@@ -8,13 +9,13 @@ import { firstParam, intParam } from '@/lib/utils'
 export const metadata = { title: 'سند قبض جديد' }
 
 export default async function NewReceiptPage({ searchParams }: PageProps<'/receipts/new'>) {
-  await requirePermission('receipts.create')
+  const user = await requirePermission('receipts.create')
   const sp = await searchParams
   const studentId = intParam(sp.studentId)
   const [revenue, partners, cashAccounts, student] = await Promise.all([
     otherRevenueCategories(db),
     db.partner.findMany({ where: { isActive: true, capitalAccountId: { not: null } }, orderBy: { name: 'asc' } }),
-    db.cashAccount.findMany({ where: { isActive: true }, orderBy: [{ isDefault: 'desc' }, { name: 'asc' }] }),
+    boxOptionsFor(db, user.id, user.permissions),
     studentId ? db.student.findUnique({ where: { id: studentId } }) : null,
   ])
   const mode = (['student', 'family', 'revenue', 'partner'] as const).find((m) => m === firstParam(sp.mode)) ?? 'student'

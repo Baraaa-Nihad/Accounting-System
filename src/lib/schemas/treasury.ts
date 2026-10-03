@@ -16,6 +16,8 @@ export const cashAccountSchema = z.object({
   lowBalanceAlert: optionalAmount,
   isDefault: z.boolean().optional(),
   notes: optionalText(500),
+  custodianId: optionalId,
+  partnerId: optionalId,
 })
 
 export const updateCashAccountSchema = z.object({
@@ -28,6 +30,8 @@ export const updateCashAccountSchema = z.object({
   isDefault: z.boolean().optional(),
   isActive: z.boolean(),
   notes: optionalText(500),
+  custodianId: optionalId,
+  partnerId: optionalId,
 })
 
 export const transferSchema = z.object({

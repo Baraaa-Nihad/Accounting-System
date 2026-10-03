@@ -4,12 +4,14 @@ import { requirePermission, can, canSeeSalaries } from '@/server/auth/guard'
 import { getSelectedYear } from '@/server/context-year'
 import { getFormatConfig } from '@/server/settings'
 import { dashboardData, latestDocuments } from '@/server/services/dashboard'
+import { boxAccess, cashAccountsSummary } from '@/server/services/treasury'
+import { db } from '@/server/db'
 import { getAlerts } from '@/server/services/alerts'
 import { makeFormatters } from '@/lib/format-jsx'
 import { formatNumber } from '@/lib/format'
 import { ARABIC_MONTHS, parts, toDateOnly } from '@/lib/dates'
 import { DOC_STATUS, RECEIPT_KIND, VOUCHER_KIND } from '@/lib/labels'
-import { D } from '@/lib/money'
+import { D, sum } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/ui/page-header'
 import { Button } from '@/components/ui/button'
@@ -25,8 +27,16 @@ export default async function DashboardPage() {
   const user = await requirePermission('dashboard.view')
   const selected = await getSelectedYear()
   const year = selected ? { id: selected.id, name: selected.name, startDate: toDateOnly(selected.startDate), endDate: toDateOnly(selected.endDate) } : null
-  const [fmt, data, alerts, latest] = await Promise.all([getFormatConfig(), dashboardData(year), getAlerts(user), latestDocuments(6)])
+  const [fmt, data, alerts, latest, access] = await Promise.all([
+    getFormatConfig(),
+    dashboardData(year),
+    getAlerts(user),
+    latestDocuments(6),
+    boxAccess(db, user.id, user.permissions),
+  ])
   const f = makeFormatters(fmt)
+  // صندوق العهدة: يظهر لصاحبه بدل رصيد كل الصناديق إذا كان مقيّدًا به أو لا يرى الخزينة
+  const myBoxes = access.own.length ? (await cashAccountsSummary(db)).filter((a) => a.isActive && access.own.includes(a.id)) : []
   const { m: month } = parts(data.today)
   const show = {
     students: can(user, 'charges.view'),
@@ -128,7 +138,17 @@ export default async function DashboardPage() {
             href="/charges?tab=overdue"
           />
         ) : null}
-        {show.treasury ? (
+        {myBoxes.length && (access.restricted || !show.treasury) ? (
+          <StatCard
+            label="صندوقي"
+            value={f.money(sum(myBoxes.map((b) => b.balance)))}
+            hint={myBoxes.map((b) => b.name).join('، ')}
+            icon={<Wallet />}
+            accent="amber"
+            emphasis
+            href={show.treasury ? (myBoxes.length === 1 ? `/treasury/${myBoxes[0].id}` : '/treasury') : undefined}
+          />
+        ) : show.treasury ? (
           <StatCard label="رصيد الصناديق" value={f.money(data.cash.cashboxes)} hint={<>البنوك: {f.money(data.cash.banks)}</>} icon={<Wallet />} accent="amber" emphasis href="/treasury" />
         ) : null}
       </div>

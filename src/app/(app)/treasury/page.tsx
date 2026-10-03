@@ -1,8 +1,8 @@
 import Link from 'next/link'
-import { AlertTriangle, Banknote, Building2, FileCheck2, List, Landmark, Wallet } from 'lucide-react'
+import { AlertTriangle, Banknote, Building2, FileCheck2, List, Landmark, UserRound, Wallet } from 'lucide-react'
 import { requirePermission, can } from '@/server/auth/guard'
 import { db } from '@/server/db'
-import { cashAccountsSummary } from '@/server/services/treasury'
+import { boxAccess, cashAccountsSummary } from '@/server/services/treasury'
 import { getSettings, getFormatConfig } from '@/server/settings'
 import { accountTotals } from '@/server/ledger/balances'
 import { accountIdByKey } from '@/server/ledger/accounts'
@@ -26,19 +26,42 @@ export default async function TreasuryPage({ searchParams }: PageProps<'/treasur
   const sp = await searchParams
   const from = isDateOnly(firstParam(sp.from)) ? firstParam(sp.from)! : undefined
   const to = isDateOnly(firstParam(sp.to)) ? firstParam(sp.to)! : undefined
-  const [fmt, settings, accounts, chequesAcc] = await Promise.all([
+  const manage = can(user, 'treasury.manage')
+  const [fmt, settings, all, chequesAcc, access, people] = await Promise.all([
     getFormatConfig(),
     getSettings(),
     cashAccountsSummary(db, from || to ? { from, to } : undefined),
     accountIdByKey(db, 'CHEQUES_UNDER_COLLECTION'),
+    boxAccess(db, user.id, user.permissions),
+    manage
+      ? Promise.all([
+          db.user.findMany({ where: { isActive: true }, orderBy: { fullName: 'asc' }, select: { id: true, fullName: true, username: true } }),
+          db.partner.findMany({ where: { isActive: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+        ]).then(([users, partners]) => ({
+          users: users.map((u) => ({ id: u.id, label: `${u.fullName} (${u.username})` })),
+          partners: partners.map((x) => ({ id: x.id, label: x.name })),
+        }))
+      : { users: [], partners: [] },
   ])
+  // صاحب العهدة المقيّد يرى صناديقه والحسابات البنكية فقط
+  const accounts = access.restricted ? all.filter((a) => a.type === 'BANK' || access.own.includes(a.id)) : all
   const f = makeFormatters(fmt)
   const cheques = (await accountTotals(db, chequesAcc, to ? { to } : undefined)).net
   const active = accounts.filter((a) => a.isActive)
   const cashTotal = sum(active.filter((a) => a.type === 'CASHBOX').map((a) => a.balance))
   const bankTotal = sum(active.filter((a) => a.type === 'BANK').map((a) => a.balance))
-  const transferAccounts = active.map((a) => ({ id: a.id, name: a.name, balance: a.balance }))
+  const transferAccounts = (access.restricted ? all.filter((a) => a.isActive) : active).map((a) => ({ id: a.id, name: a.name, balance: a.balance }))
   const period = !!(from || to)
+  // النقدية لدى كل صاحب عهدة (موظف أو شريك)
+  const custody = new Map<string, { name: string; kind: 'موظف' | 'شريك'; boxes: number; total: ReturnType<typeof D> }>()
+  for (const a of active) {
+    if (a.type !== 'CASHBOX' || !(a.custodianName || a.partnerName)) continue
+    const key = a.custodianId ? `u${a.custodianId}` : `p${a.partnerId}`
+    const row = custody.get(key) ?? { name: (a.custodianName ?? a.partnerName)!, kind: a.custodianId ? 'موظف' : 'شريك', boxes: 0, total: D(0) }
+    row.boxes += 1
+    row.total = row.total.plus(D(a.balance))
+    custody.set(key, row)
+  }
 
   return (
     <>
@@ -53,8 +76,10 @@ export default async function TreasuryPage({ searchParams }: PageProps<'/treasur
                 التحويلات
               </Link>
             </Button>
-            {can(user, 'treasury.manage') ? <CashAccountDialog /> : null}
-            {can(user, 'treasury.transfer') && transferAccounts.length > 1 ? <TransferDialog accounts={transferAccounts} /> : null}
+            {manage ? <CashAccountDialog people={people} /> : null}
+            {can(user, 'treasury.transfer') && transferAccounts.length > 1 ? (
+              <TransferDialog accounts={transferAccounts} fromIds={access.restricted ? access.own : undefined} />
+            ) : null}
           </>
         }
       />
@@ -64,6 +89,29 @@ export default async function TreasuryPage({ searchParams }: PageProps<'/treasur
         <StatCard label="إجمالي النقدية المتوفرة" value={f.money(cashTotal.plus(bankTotal))} icon={<Banknote />} accent="brand" emphasis />
         <StatCard label="شيكات برسم التحصيل" value={f.money(cheques)} icon={<FileCheck2 />} accent="amber" href="/cheques" hint="شيكات مستلمة لم تُحصّل بعد" />
       </div>
+      {custody.size && !access.restricted ? (
+        <div className="card mb-5 overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3">
+            <UserRound className="size-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-800">النقدية لدى أصحاب العهدة</h2>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {[...custody.values()]
+              .sort((a, b) => b.total.comparedTo(a.total))
+              .map((r) => (
+                <div key={`${r.kind}-${r.name}`} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium text-slate-800">{r.name}</span>
+                    <span className="ms-2 text-xs text-slate-500">
+                      {r.kind} — {r.boxes === 1 ? 'صندوق واحد' : `${r.boxes} صناديق`}
+                    </span>
+                  </span>
+                  <span className={cn('font-semibold', r.total.isNegative() ? 'text-rose-600' : 'text-slate-900')}>{f.money(r.total)}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      ) : null}
       <div className="card mb-5 overflow-hidden">
         <FilterBar
           fields={[
@@ -98,6 +146,12 @@ export default async function TreasuryPage({ searchParams }: PageProps<'/treasur
                         {a.type === 'CASHBOX' ? 'صندوق' : [a.bankName, a.accountNumber].filter(Boolean).join(' — ') || 'حساب بنكي'}
                         <span className="num ms-1 text-slate-400">({a.glCode})</span>
                       </p>
+                      {a.custodianName || a.partnerName ? (
+                        <p className="mt-0.5 flex items-center gap-1 truncate text-xs font-medium text-brand-700">
+                          <UserRound className="size-3.5 shrink-0" />
+                          {a.custodianName ? `في عهدة ${a.custodianName}` : `صندوق الشريك ${a.partnerName}`}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
@@ -132,8 +186,9 @@ export default async function TreasuryPage({ searchParams }: PageProps<'/treasur
                     <Button variant="soft" size="sm" asChild>
                       <Link href={`/treasury/${a.id}`}>كشف الحركة</Link>
                     </Button>
-                    {can(user, 'treasury.manage') ? (
+                    {manage ? (
                       <CashAccountDialog
+                        people={people}
                         initial={{
                           id: a.id,
                           name: a.name,
@@ -145,6 +200,7 @@ export default async function TreasuryPage({ searchParams }: PageProps<'/treasur
                           isDefault: a.isDefault,
                           isActive: a.isActive,
                           notes: '',
+                          custody: a.custodianId ? `u:${a.custodianId}` : a.partnerId ? `p:${a.partnerId}` : '',
                         }}
                       />
                     ) : null}

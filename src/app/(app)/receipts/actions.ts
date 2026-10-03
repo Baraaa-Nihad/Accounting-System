@@ -16,6 +16,7 @@ import {
   studentCredit,
   type OpenInstallment,
 } from '@/server/services/receipts'
+import { boxOptionsFor } from '@/server/services/treasury'
 import {
   applyCreditSchema,
   bounceChequeSchema,
@@ -37,7 +38,7 @@ export interface PaymentContext {
 /** بيانات نافذة تسجيل الدفعة: الأقساط المفتوحة والصناديق والرصيد الدائن. */
 export async function loadPaymentContextAction(input: { studentId?: number; guardianId?: number }): Promise<ActionResult<PaymentContext>> {
   try {
-    await actionContext('receipts.create')
+    const ctx = await actionContext('receipts.create')
     let students: { id: number; fullName: string; studentNumber: string }[] = []
     let payerName = ''
     if (input.guardianId) {
@@ -51,7 +52,7 @@ export async function loadPaymentContextAction(input: { studentId?: number; guar
     }
     const [installments, cashAccounts, credits] = await Promise.all([
       openInstallments(db, students.map((s) => s.id)),
-      db.cashAccount.findMany({ where: { isActive: true }, orderBy: [{ isDefault: 'desc' }, { type: 'asc' }, { name: 'asc' }] }),
+      boxOptionsFor(db, ctx.userId, ctx.permissions),
       Promise.all(students.map((s) => studentCredit(db, s.id))),
     ])
     return ok({

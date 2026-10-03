@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { StatCard } from '@/components/ui/stat-card'
 import { StatementView } from '@/components/ledger/statement-view'
 import { TransferDialog } from '@/components/treasury/transfer-dialog'
-import { cashAccountsSummary } from '@/server/services/treasury'
+import { boxAccess, cashAccountsSummary } from '@/server/services/treasury'
 
 export const metadata = { title: 'حركة الصندوق' }
 
@@ -21,6 +21,9 @@ export default async function CashAccountPage({ params, searchParams }: PageProp
   const sp = await searchParams
   const account = await db.cashAccount.findUnique({ where: { id: Number(id) } })
   if (!account) notFound()
+  // صاحب العهدة المقيّد لا يطّلع على صناديق غيره
+  const access = await boxAccess(db, user.id, user.permissions)
+  if (access.restricted && account.type === 'CASHBOX' && !access.own.includes(account.id)) notFound()
   const target = (await statementTarget(db, 'cash', account.id))!
   const from = isDateOnly(firstParam(sp.from)) ? firstParam(sp.from)! : null
   const to = isDateOnly(firstParam(sp.to)) ? firstParam(sp.to)! : null
@@ -33,7 +36,11 @@ export default async function CashAccountPage({ params, searchParams }: PageProp
         title={account.name}
         description={account.type === 'CASHBOX' ? 'صندوق نقدي' : [account.bankName, account.accountNumber, account.iban].filter(Boolean).join(' — ') || 'حساب بنكي'}
         breadcrumbs={[{ label: 'الصندوق والبنوك', href: '/treasury' }, { label: account.name }]}
-        actions={can(user, 'treasury.transfer') && account.isActive && accounts.length > 1 ? <TransferDialog accounts={accounts} defaultFromId={account.id} /> : null}
+        actions={
+          can(user, 'treasury.transfer') && account.isActive && accounts.length > 1 ? (
+            <TransferDialog accounts={accounts} defaultFromId={account.id} fromIds={access.restricted ? access.own : undefined} />
+          ) : null
+        }
       />
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
         <StatCard label="الرصيد الحالي" value={f.money(balance)} accent="brand" emphasis />

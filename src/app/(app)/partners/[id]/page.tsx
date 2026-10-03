@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpFromLine, Wallet } from 'lucide-react'
 import { requirePermission, can } from '@/server/auth/guard'
 import { db } from '@/server/db'
 import { listPartners, partnerHasMovements } from '@/server/services/partners'
+import { cashAccountsSummary } from '@/server/services/treasury'
 import { statementTarget } from '@/server/ledger/party-statements'
 import { getFormatConfig } from '@/server/settings'
 import { makeFormatters } from '@/lib/format-jsx'
@@ -24,11 +25,12 @@ export default async function PartnerPage({ params, searchParams }: PageProps<'/
   const sp = await searchParams
   if (!Number.isInteger(id) || id <= 0) notFound()
   const manage = can(user, 'partners.manage')
-  const [fmt, partners, users, target] = await Promise.all([
+  const [fmt, partners, users, target, boxes] = await Promise.all([
     getFormatConfig(),
     listPartners(db),
     manage ? db.user.findMany({ where: { isActive: true }, orderBy: { fullName: 'asc' }, select: { id: true, fullName: true, username: true } }) : [],
     statementTarget(db, 'partner', id),
+    cashAccountsSummary(db).then((all) => all.filter((a) => a.partnerId === id)),
   ])
   const p = partners.find((x) => x.id === id)
   if (!p || !target) notFound()
@@ -108,6 +110,32 @@ export default async function PartnerPage({ params, searchParams }: PageProps<'/
           </div>
         ))}
       </div>
+      {boxes.length ? (
+        <div className="card mb-5 overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3">
+            <Wallet className="size-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-800">صندوق الشريك</h2>
+            <span className="text-xs text-slate-500">نقدية المدرسة الموجودة مع الشريك</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {boxes.map((b) => (
+              <div key={b.id} className={cn('flex items-center justify-between gap-3 px-5 py-3', !b.isActive && 'opacity-60')}>
+                <span className="min-w-0 truncate">
+                  {can(user, 'treasury.view') ? (
+                    <Link href={`/treasury/${b.id}`} className="font-medium text-slate-800 hover:text-brand-700">
+                      {b.name}
+                    </Link>
+                  ) : (
+                    <span className="font-medium text-slate-800">{b.name}</span>
+                  )}
+                  {b.isActive ? null : <Badge className="ms-2">معطل</Badge>}
+                </span>
+                <span className={cn('text-lg font-bold', D(b.balance).isNegative() ? 'text-rose-600' : 'text-slate-900')}>{f.money(b.balance)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <StatementView
         target={target}
         from={isDateOnly(firstParam(sp.from)) ? firstParam(sp.from)! : null}

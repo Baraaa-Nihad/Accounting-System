@@ -1,6 +1,6 @@
 import { requirePermission, can } from '@/server/auth/guard'
 import { db } from '@/server/db'
-import { cashAccountsSummary, listTransfers } from '@/server/services/treasury'
+import { boxAccess, cashAccountsSummary, listTransfers } from '@/server/services/treasury'
 import { getFormatConfig } from '@/server/settings'
 import { makeFormatters } from '@/lib/format-jsx'
 import { DOC_STATUS } from '@/lib/labels'
@@ -24,9 +24,10 @@ export default async function TransfersPage({ searchParams }: PageProps<'/treasu
   const from = firstParam(sp.from)
   const to = firstParam(sp.to)
   const highlight = intParam(sp.highlight)
-  const [fmt, accounts, data] = await Promise.all([
+  const [fmt, accounts, access, data] = await Promise.all([
     getFormatConfig(),
     cashAccountsSummary(db),
+    boxAccess(db, user.id, user.permissions),
     listTransfers(db, {
       from: isDateOnly(from) ? from : undefined,
       to: isDateOnly(to) ? to : undefined,
@@ -42,7 +43,7 @@ export default async function TransfersPage({ searchParams }: PageProps<'/treasu
       <PageHeader
         title="التحويلات بين الصناديق والبنوك"
         breadcrumbs={[{ label: 'الصندوق والبنوك', href: '/treasury' }, { label: 'التحويلات' }]}
-        actions={can(user, 'treasury.transfer') && active.length > 1 ? <TransferDialog accounts={active} /> : null}
+        actions={can(user, 'treasury.transfer') && active.length > 1 ? <TransferDialog accounts={active} fromIds={access.restricted ? access.own : undefined} /> : null}
       />
       <div className="card overflow-hidden">
         <FilterBar

@@ -1,6 +1,6 @@
 import { requirePermission, can } from '@/server/auth/guard'
 import { db } from '@/server/db'
-import { cashAccountsSummary } from '@/server/services/treasury'
+import { boxOptionsFor } from '@/server/services/treasury'
 import { listSuppliers } from '@/server/services/parties'
 import { expenseCategories, freePostingAccounts } from '@/server/ledger/accounts'
 import { PageHeader } from '@/components/ui/page-header'
@@ -22,7 +22,7 @@ export default async function NewVoucherPage({ searchParams }: PageProps<'/vouch
   const studentId = intParam(sp.studentId)
 
   const [cash, expenses, suppliers, jobs, partners, payrollItems, otherAccounts, student] = await Promise.all([
-    cashAccountsSummary(db),
+    boxOptionsFor(db, user.id, user.permissions),
     expenseCategories(db),
     listSuppliers(db, { active: true, pageSize: 1000 }),
     db.contractorJob.findMany({ where: { status: { not: 'CANCELLED' } }, include: { contractor: true }, orderBy: [{ contractor: { name: 'asc' } }, { startDate: 'desc' }] }),
@@ -39,7 +39,7 @@ export default async function NewVoucherPage({ searchParams }: PageProps<'/vouch
   ])
   const data: VoucherFormData = {
     kinds,
-    cashAccounts: cash.filter((c) => c.isActive).map((c) => ({ id: c.id, name: c.name, type: c.type, balance: c.balance, isDefault: c.isDefault })),
+    cashAccounts: cash,
     expenseAccounts: expenses.map((a) => ({ id: a.id, code: a.code, name: a.name })),
     suppliers: suppliers.rows.map((s) => ({ id: s.id, name: s.name, balance: D(s.balance).toString() })),
     jobs: jobs

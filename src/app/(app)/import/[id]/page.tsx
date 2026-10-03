@@ -6,6 +6,7 @@ import { db } from '@/server/db'
 import type { Ctx } from '@/server/context'
 import { BusinessError, PermissionError } from '@/server/errors'
 import { loadSession, sessionOutcome, type LoadedSession, type StoredResult } from '@/server/import/service'
+import { boxOptionsFor } from '@/server/services/treasury'
 import { getFormatConfig } from '@/server/settings'
 import { listYears } from '@/server/years'
 import { makeFormatters } from '@/lib/format-jsx'
@@ -61,7 +62,7 @@ export default async function ImportSessionPage({ params, searchParams }: PagePr
     getFormatConfig(),
     sessionOutcome(s),
     listYears(),
-    db.cashAccount.findMany({ where: { isActive: true }, orderBy: [{ isDefault: 'desc' }, { name: 'asc' }], select: { id: true, name: true } }),
+    boxOptionsFor(db, user.id, user.permissions).then((list) => list.map((c) => ({ id: c.id, name: c.name }))),
   ])
   const f = makeFormatters(fmt)
   const completed = s.status === 'COMPLETED'

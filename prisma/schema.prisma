@@ -217,6 +217,7 @@ model User {
 
   sessions          Session[]
   partner           Partner?
+  custodyBoxes      CashAccount[]    @relation("CashAccountCustodian")
   receiptsCreated   Receipt[]        @relation("ReceiptCreatedBy")
   receiptsCancelled Receipt[]        @relation("ReceiptCancelledBy")
   vouchersCreated   PaymentVoucher[] @relation("VoucherCreatedBy")
@@ -305,6 +306,7 @@ model Partner {
   receipts     Receipt[]
   vouchers     PaymentVoucher[]
   journalLines JournalLine[]
+  cashAccounts CashAccount[]
 
   @@map("partners")
 }
@@ -698,6 +700,11 @@ model CashAccount {
   isActive        Boolean         @default(true)
   isDefault       Boolean         @default(false)
   notes           String?
+  // عهدة الصندوق النقدي: موظف (مستخدم) أو شريك — لا الاثنان معًا، ولا للحسابات البنكية
+  custodianId     Int?
+  custodian       User?           @relation("CashAccountCustodian", fields: [custodianId], references: [id])
+  partnerId       Int?
+  partner         Partner?        @relation(fields: [partnerId], references: [id])
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -707,6 +714,8 @@ model CashAccount {
   transfersTo   CashTransfer[]   @relation("TransferTo")
   cheques       Cheque[]
 
+  @@index([custodianId])
+  @@index([partnerId])
   @@map("cash_accounts")
 }
 

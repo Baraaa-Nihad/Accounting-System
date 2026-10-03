@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { requirePermission, can } from '@/server/auth/guard'
 import { db } from '@/server/db'
 import { getPayrollRun, plannedAdvancesForRun, runLabel } from '@/server/services/payroll'
-import { cashAccountsSummary } from '@/server/services/treasury'
+import { boxOptionsFor } from '@/server/services/treasury'
 import { getFormatConfig, getSettings } from '@/server/settings'
 import { makeFormatters } from '@/lib/format-jsx'
 import { PAYROLL_STATUS } from '@/lib/labels'
@@ -27,7 +27,7 @@ export default async function PayrollRunPage({ params }: PageProps<'/payroll/[id
     getFormatConfig(),
     getSettings(),
     plannedAdvancesForRun(db, run, run.items.map((i) => i.employeeId)),
-    run.status === 'APPROVED' ? cashAccountsSummary(db) : Promise.resolve([]),
+    run.status === 'APPROVED' ? boxOptionsFor(db, user.id, user.permissions) : Promise.resolve([]),
     run.status === 'DRAFT'
       ? db.employee.findMany({ where: { status: 'ACTIVE', id: { notIn: run.items.map((i) => i.employeeId) } }, select: { id: true, fullName: true }, orderBy: { fullName: 'asc' } })
       : Promise.resolve([]),
@@ -56,7 +56,7 @@ export default async function PayrollRunPage({ params }: PageProps<'/payroll/[id
         actions={
           <RunActions
             run={{ id: run.id, status: run.status, label, totalNet: run.totalNet.toString(), totalPaid: run.totalPaid.toString() }}
-            cashAccounts={cash.filter((c) => c.isActive).map((c) => ({ id: c.id, name: c.name, type: c.type, balance: c.balance, isDefault: c.isDefault }))}
+            cashAccounts={cash}
             missingEmployees={missing}
           />
         }

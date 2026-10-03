@@ -11,6 +11,7 @@ import { nextDocumentNumber } from '../numbering'
 import { postEntry, reverseEntry, type JournalLineInput } from '../ledger/posting'
 import { accountIdByKey } from '../ledger/accounts'
 import { recomputeCharge, recomputeInstallment } from './installments'
+import { assertBoxAllowed } from './treasury'
 import { D, round, sum, toDb, ZERO } from '@/lib/money'
 import { fromDateOnly, toDateOnly, type DateOnly } from '@/lib/dates'
 import { PAYMENT_METHOD } from '@/lib/labels'
@@ -123,7 +124,7 @@ function Decimal_min(a: Decimal, b: Decimal) {
 }
 
 /** الحساب المدين في قيد القبض حسب طريقة الدفع. */
-async function debitAccountFor(tx: Tx, input: { paymentMethod: PaymentMethod; cashAccountId?: number | null; cheque?: ChequeInput | null }) {
+async function debitAccountFor(tx: Tx, ctx: Ctx, input: { paymentMethod: PaymentMethod; cashAccountId?: number | null; cheque?: ChequeInput | null }) {
   if (input.paymentMethod === 'CHEQUE') {
     if (!input.cheque?.number || !input.cheque.dueDate) {
       throw new BusinessError('بيانات الشيك مطلوبة (رقم الشيك وتاريخ الاستحقاق)', { 'cheque.number': 'رقم الشيك مطلوب' })
@@ -131,6 +132,7 @@ async function debitAccountFor(tx: Tx, input: { paymentMethod: PaymentMethod; ca
     if (input.cheque.depositToAccountId) {
       const bank = await tx.cashAccount.findUnique({ where: { id: input.cheque.depositToAccountId } })
       if (!bank || !bank.isActive) throw new BusinessError('الحساب البنكي المختار غير متاح')
+      await assertBoxAllowed(tx, ctx, bank.id)
       return { accountId: bank.glAccountId, cashAccountId: bank.id, chequeStatus: 'CLEARED' as const }
     }
     return { accountId: await accountIdByKey(tx, 'CHEQUES_UNDER_COLLECTION'), cashAccountId: null, chequeStatus: 'IN_PORTFOLIO' as const }
@@ -138,6 +140,7 @@ async function debitAccountFor(tx: Tx, input: { paymentMethod: PaymentMethod; ca
   if (!input.cashAccountId) throw new BusinessError('اختر الصندوق أو الحساب البنكي المستلم', { cashAccountId: 'مطلوب' })
   const ca = await tx.cashAccount.findUnique({ where: { id: input.cashAccountId } })
   if (!ca || !ca.isActive) throw new BusinessError('الصندوق/الحساب المختار غير متاح', { cashAccountId: 'غير متاح' })
+  await assertBoxAllowed(tx, ctx, ca.id)
   return { accountId: ca.glAccountId, cashAccountId: ca.id, chequeStatus: null }
 }
 
@@ -200,7 +203,7 @@ export async function createStudentReceipt(tx: Tx, ctx: Ctx, input: StudentRecei
     if (!studentIds.includes(creditStudentId)) throw new BusinessError('الطالب المختار للرصيد الدائن ليس من أبناء ولي الأمر')
   }
 
-  const debit = await debitAccountFor(tx, input)
+  const debit = await debitAccountFor(tx, ctx, input)
   const number = await nextDocumentNumber(tx, 'receipt', input.date)
   const instMap = new Map(open.map((o) => [o.id, o]))
   const payerName =
@@ -348,7 +351,7 @@ export async function createOtherReceipt(tx: Tx, ctx: Ctx, input: OtherReceiptIn
     partnerId = partner.id
     label = `رأس مال الشريك ${partner.name}`
   }
-  const debit = await debitAccountFor(tx, input)
+  const debit = await debitAccountFor(tx, ctx, input)
   const number = await nextDocumentNumber(tx, 'receipt', input.date)
   const receipt = await tx.receipt.create({
     data: {
